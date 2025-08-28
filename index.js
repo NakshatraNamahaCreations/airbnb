@@ -7,6 +7,9 @@ import { apiLogger } from './utils/logger.js';
 import morgan from 'morgan';
 import compression from 'compression';
 import { NotFoundError } from './utils/error.js';
+import authRoutes from './routes/auth.routes.js';
+import userRoutes from './routes/user.routes.js';
+import adminRoutes from './routes/admin.routes.js';
 
 dotenv.config({ quiet: true, debug: false });
 const PORT = process.env.PORT || 9000;
@@ -44,8 +47,13 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
+// routes
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/admin', adminRoutes);
+
 app.get('/', (req, res) => {
-  return res.status(200).json({ message: 'Hello from airbnb-clone v1' });
+  return res.status(200).json({ message: 'Hello from air-bnb clone v1' });
 });
 
 app.use((req, res) => {
@@ -79,5 +87,3 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on port ${PORT}`);
 });
-
-export { app };
