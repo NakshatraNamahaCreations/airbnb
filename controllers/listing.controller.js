@@ -4,6 +4,7 @@ import { apiLogger } from '../utils/logger.js';
 import Listing from '../models/listing.model.js';
 import Collection from '../models/collection.model.js';
 import User from '../models/user.model.js';
+import Inventory from '../models/inventory.model.js';
 import mongoose from 'mongoose';
 
 
@@ -52,27 +53,39 @@ const getMyListings = asyncHandler(async(req, res) => {
 
 
 const searchListings = asyncHandler(async(req, res) => {
-  const { userId } = req;
-  const { searchQuery, checkInDate, checkOutDate, state, adults } = req.query;
-  console.log({ searchQuery, checkInDate, checkOutDate, state, adults });
+  const { searchQuery, checkInDate, checkOutDate, state } = req.body;
 
   let filter = {};
 
-  if (searchQuery && searchQuery.trim() !== '') {
-    const searchQueryTrimmed = searchQuery.trim().toLowerCase();
-
-    // filter.$or =  [
-    //   { title: { $regex: searchQueryTrimmed, $options: 'i' } },
-    //   { description: { $regex: searchQueryTrimmed, $options: 'i' } },
-    //   // { "location.address": { $regex: searchQueryTrimmed, $options: "i" } },
-    //   // { "location.city": { $regex: searchQueryTrimmed, $options: "i" } },
-    // ];
-
-    // state filter
-  }
+  // if (searchQuery && searchQuery.trim() !== '') {
+  //   const searchQueryTrimmed = searchQuery.trim();
+  //   // Example: add basic title/address regex search later if needed
+  //   filter.$or = [
+  //     { title: { $regex: searchQueryTrimmed, $options: 'i' } },
+  //     { address: { $regex: searchQueryTrimmed, $options: 'i' } },
+  //   ];
+  // }
 
   if (state) {
-    filter.state = state; // since it's enum-safe
+    filter.state = state;
+  }
+
+  // If dates provided, exclude listings that are blocked/fully_booked/maintenance overlapping those dates
+  if (checkInDate && checkOutDate) {
+    const start = new Date(checkInDate);
+    const end = new Date(checkOutDate);
+
+    // const blockingStatuses = ['fully_booked', 'blocked', 'maintenance'];
+
+    const blocked = await Inventory.find({
+      status: { $in: blockingStatuses },
+      checkInDate: { $lt: end },
+      checkOutDate: { $gt: start },
+    }).distinct('listingId');
+
+    if (blocked.length > 0) {
+      filter._id = { $nin: blocked };
+    }
   }
 
   const listings = await Listing.find(filter).select('title state address').lean();
@@ -82,12 +95,12 @@ const searchListings = asyncHandler(async(req, res) => {
     count: listings.length,
     data: listings,
   });
-
 });
 
 const getListing = asyncHandler(async(req, res) => {
   const { userId } = req;
   const { id } = req.params;
+  const { checkInDate, checkOutDate } = req.query;
 
 
   if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -104,29 +117,51 @@ const getListing = asyncHandler(async(req, res) => {
     $pull: { recentlyViewed: { listing: id } },
   });
 
-  await User.findByIdAndUpdate(
-    userId,
-    {
-      $push: {
-        recentlyViewed: {
-          $each: [{ listing: id, viewedAt: new Date() }],
-          $position: 0,
-          $slice: 20,
-        },
-      },
-    },
-    { new: true },
-  );
 
+  // Optional availability check for single-unit listings
+  let availability = undefined;
+  if (checkInDate && checkOutDate) {
+    const start = new Date(checkInDate);
+    const end = new Date(checkOutDate);
+    const blockingStatuses = ['fully_booked', 'blocked', 'maintenance'];
 
-  if (!user) {
-    throw new NotFoundError('User doesn\'t exist');
+    const overlapCount = await Inventory.countDocuments({
+      listingId: id,
+      // status: { $in: blockingStatuses },
+      checkInDate: { $lt: end },
+      checkOutDate: { $gt: start },
+    });
+
+    availability = overlapCount === 0;
   }
 
+  // Fetch blocked inventory for the next 3 months starting today
+  const today = new Date();
+  const threeMonthsLater = new Date();
+  threeMonthsLater.setMonth(today.getMonth() + 3);
+
+  const blockingStatuses = ['fully_booked', 'blocked', 'maintenance'];
+
+  // Find blocked inventory for this listing in the next 3 months
+  const blockedInventory = await Inventory.find({
+    listingId: id,
+    // status: { $in: blockingStatuses },
+    checkInDate: { $lt: threeMonthsLater },
+    checkOutDate: { $gt: today },
+  }).lean();
+
+  // Map to array of blocked date ranges
+  const blockedDates = blockedInventory.map((item) => ({
+    checkInDate: item.checkInDate,
+    checkOutDate: item.checkOutDate,
+    status: item.status,
+  }));
 
   res.status(200).json({
     message: 'Listing fetched successfully',
     data: listing,
+    availability,
+    blockedDates,
   });
 
 });

@@ -11,6 +11,7 @@ const enquirySchema = new mongoose.Schema({
   message: { type: String }, // optional note from guest
 
   status: { type: String, enum: ['pending', 'accepted', 'rejected'], default: 'pending' },
+  rejectionReason: { type: String }, // reason for rejection when status is rejected
 }, { timestamps: true });
 
 const Enquiry = mongoose.model('Enquiry', enquirySchema);

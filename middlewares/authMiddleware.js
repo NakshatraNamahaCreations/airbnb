@@ -2,9 +2,11 @@ import jwt from 'jsonwebtoken';
 import { AuthError } from '../utils/error.js';
 import User from '../models/user.model.js';
 import asyncHandler from './asynchandler.js';
+import { apiLogger } from '../utils/logger.js';
 
 const authenticate = asyncHandler(async(req, res, next) => {
-  console.log('Hello ' );
+  // console.log('req: ', req);
+  // console.log('req.headers: ', req.headers);
   const header = req.get('authorization') || '';
   const [scheme, token] = header.split(' ');
   if (scheme !== 'Bearer' || !token) {
@@ -28,7 +30,6 @@ const authenticate = asyncHandler(async(req, res, next) => {
 
       req.user = user;
       req.userId = user._id;
-      console.log('user toJSON: ', user.toJSON());
       next();
     } catch (error) {
       throw new AuthError('Authentication failed');
@@ -48,11 +49,17 @@ const authorizeAdmin = asyncHandler(async(req, res, next) => {
 
 const authorizeRoles = (...allowedRoles) => {
   return (async(req, res, next) => {
-    if (allowedRoles.includes(req.user.roles)) {
-      next();
-    } else {
-      throw new AuthError('Not authorized to access this route');
+    console.log('allowedRoles: ', allowedRoles);
+    console.log('req.user.roles: ', req.user.roles);
+
+    const hasRole = req.user.roles?.some((role) => allowedRoles.includes(role));
+
+    if (hasRole) {
+      return next();
     }
+
+    // If no match, throw error
+    return next(new AuthError('Not authorized to access this route'));
   });
 };
 

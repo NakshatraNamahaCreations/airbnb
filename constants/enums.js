@@ -46,12 +46,10 @@ const STATES = [
   'Assam',
   'Bihar',
   'Chhattisgarh',
-  'Delhi',
   'Goa',
   'Gujarat',
   'Haryana',
   'Himachal Pradesh',
-  'Jammu and Kashmir',
   'Jharkhand',
   'Karnataka',
   'Kerala',
@@ -71,7 +69,11 @@ const STATES = [
   'Uttar Pradesh',
   'Uttarakhand',
   'West Bengal',
+  'Delhi',
+  'Jammu and Kashmir',
+  'Ladakh',
 ];
+
 
 // const STATE_CODES = Object.freeze(Object.keys(STATE_MAP));
 

@@ -18,6 +18,15 @@ const ListingSchema = mongoose.Schema({
   // currency: { type: String, default: 'INR' },
   status: { type: String, enum: ['active', 'paused', 'draft'], default: 'active' },
   rating: { type: String },
+  isVerified: { type: Boolean, default: false },
+  verificationStatus: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+  verificationReason: { type: String },
+  capacity: {
+    adults: { type: Number, required: true, min: 1 },
+    children: { type: Number, required: true, min: 0 },
+    infants: { type: Number, required: true, min: 0 },
+    pets: { type: Number, required: true, min: 0 },
+  },
 }, { timestamps: true });
 
 ListingSchema.index({ location: '2dsphere' });

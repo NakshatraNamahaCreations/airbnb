@@ -1,9 +1,3 @@
-// import User from '../models/User.js'; // Assuming you have a User model
-// import Location from '../models/Location'; // Assuming you have a Location model
-
-// create "admin, host, guest" -> i.e. user
-// we create admin
-
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import OtpSession from '../models/otpSession.model.js';

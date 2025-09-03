@@ -14,7 +14,12 @@ import listingRoutes from './routes/listing.routes.js';
 import inventoryRoutes from './routes/inventory.routes.js';
 import uploadRoutes from './routes/upload.routes.js';
 import enquiryRoutes from './routes/enquiry.routes.js';
+import collectionRoutes from './routes/collection.routes.js';
 import { developmentRoute } from './routes/development.route.js';
+import featuredRoutes from './routes/featured.routes.js';
+import feedbackRoutes from './routes/feedback.routes.js';
+import paymentRoutes from './routes/payment.routes.js';
+import tempRoutes from './routes/temp.routes.js';
 
 const PORT = process.env.PORT || 9000;
 
@@ -56,12 +61,16 @@ app.use(developmentRoute);
 
 // routes
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/listings', listingRoutes);
-app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/collections', collectionRoutes);
 app.use('/api/v1/inventories', inventoryRoutes);
 app.use('/api/v1/enquiries', enquiryRoutes);
 app.use('/api/v1/uploads', uploadRoutes);
+app.use('/api/v1/featured-areas', featuredRoutes);
+app.use('/api/v1/feedback', feedbackRoutes);
+app.use('/api/v1/payments', paymentRoutes);
 
 app.get('/', (req, res) => {
   return res.status(200).json({ message: 'Hello from air-bnb clone v1' });
