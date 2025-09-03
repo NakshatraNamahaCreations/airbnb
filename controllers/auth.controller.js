@@ -8,6 +8,7 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import OtpSession from '../models/otpSession.model.js';
 import User from '../models/user.model.js';
+import { generateToken } from '../utils/createToken.js';
 
 const OTP_LEN = 6;
 const OTP_TTL_MIN = 10;       // dev TTL
@@ -132,7 +133,10 @@ const verifyOtp = async(req, res) => {
         dateOfBirth: existing.dateOfBirth || '',
         phone: existing.phone,
       };
-      return res.status(200).json({ ok: true, isNew: false, userPreview });
+
+
+      const token = generateToken(existing._id, existing.roles, existing.phone, existing.email);
+      return res.status(200).json({ data: { token, isNew: false, userPreview } });
     }
 
     // no user -> mobile should show form for name, dateOfBirth, email
