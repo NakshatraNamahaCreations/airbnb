@@ -4,8 +4,8 @@ import { apiLogger } from '../utils/logger.js';
 import Listing from '../models/listing.model.js';
 import Collection from '../models/collection.model.js';
 import User from '../models/user.model.js';
-import Inventory from '../models/inventory.model.js';
 import mongoose from 'mongoose';
+import Booking from '../models/booking.model.js';
 
 
 
@@ -13,20 +13,63 @@ import mongoose from 'mongoose';
 
 const registerListing = asyncHandler(async(req, res) => {
   const { userId } = req;
-  const { title, description, imageUrls, address, amenities, location, pincode, state } = req.body;
-  console.log({ title, description, imageUrls, address, amenities, location, pincode, state });
+  const {
+    title,
+    description,
+    imageUrls = [],
+    addressLine,
+    city,
+    state,
+    pincode,
+    pricePerNight,
+    currency = 'INR',
+    bedrooms,
+    maxGuests,
+    capacity = {},
+    amenities = [],
+    location = {},
+    houseRules = [],
+    safetyAndProperty = [],
+  } = req.body;
 
+  console.log({
+    title,
+    description,
+    imageUrls,
+    addressLine,
+    city,
+    state,
+    pincode,
+    pricePerNight,
+    currency,
+    bedrooms,
+    maxGuests,
+    capacity,
+    amenities,
+    location,
+    houseRules,
+    safetyAndProperty,
+  });
 
   const newListing = new Listing({
     hostId: userId,
     title,
     description,
-    location,
     imageUrls,
-    address,
-    amenities,
-    pincode,
+    addressLine,
+    city,
     state,
+    pincode,
+    pricePerNight,
+    currency,
+    bedrooms,
+    maxGuests,
+    capacity,
+    rating: (Math.random() * 5).toFixed(1),
+    amenities,
+    location,
+    houseRules,
+    safetyAndProperty,
   });
 
   await newListing.save();
@@ -34,15 +77,27 @@ const registerListing = asyncHandler(async(req, res) => {
   res.status(201).json({ message: 'Listing created successfully', listing: newListing });
 });
 
-
-
-
-
 const getMyListings = asyncHandler(async(req, res) => {
   const { userId } = req;
 
   const listings = await Listing.find({ hostId: userId }).lean();
 
+
+  res.status(200).json({
+    message: 'host listings',
+    data: listings,
+  });
+
+});
+
+const getListings = asyncHandler(async(req, res) => {
+  const { userId } = req;
+
+  const listings = await Listing.find({ hostId: userId }).lean();
+
+  // listings.map((listing) => {
+  //   listing.rating = (Math.random() * 5).toFixed(1);  // Random rating between 0 and 5, rounded to 1 decimal
+  // });
 
   res.status(200).json({
     message: 'host listings',
@@ -77,8 +132,8 @@ const searchListings = asyncHandler(async(req, res) => {
 
     // const blockingStatuses = ['fully_booked', 'blocked', 'maintenance'];
 
-    const blocked = await Inventory.find({
-      status: { $in: blockingStatuses },
+    const blocked = await Booking.find({
+      // status: { $in: blockingStatuses },
       checkInDate: { $lt: end },
       checkOutDate: { $gt: start },
     }).distinct('listingId');
@@ -88,7 +143,26 @@ const searchListings = asyncHandler(async(req, res) => {
     }
   }
 
-  const listings = await Listing.find(filter).select('title state address').lean();
+  const listings = await Listing.aggregate([
+    { $match: filter },  // Apply your filter condition
+    {
+      $project: {
+        title: 1,
+        state: 1,
+        address: 1,
+        pricePerNight: 1,
+        rating: 1,
+        imageUrls: { $arrayElemAt: ['$imageUrls', 0] },  // Get only the first image
+      },
+    },
+  ]);
+
+  // listings.map((listing) => {
+  //   listing.rating = (Math.random() * 5).toFixed(1);  // Random rating between 0 and 5, rounded to 1 decimal
+  // });
+
+  console.log(listings);
+
 
   res.status(200).json({
     message: 'searchListings',
@@ -117,17 +191,28 @@ const getListing = asyncHandler(async(req, res) => {
     $pull: { recentlyViewed: { listing: id } },
   });
 
+  // Add the listing back to the recentlyViewed array with the current date
+  await User.findByIdAndUpdate(userId, {
+    $push: { recentlyViewed: { listing: id, viewedAt: new Date() } },  // Add with timestamp
+  });
+
+  // Optional: Limit the array size to 10 (or any max limit you want)
+  const maxRecentlyViewed = 10;
+  if (user.recentlyViewed.length > maxRecentlyViewed) {
+    user.recentlyViewed.pop();  // Remove the oldest listing (at the end of the array)
+    await user.save();
+  }
+
 
   // Optional availability check for single-unit listings
   let availability = undefined;
   if (checkInDate && checkOutDate) {
     const start = new Date(checkInDate);
     const end = new Date(checkOutDate);
-    const blockingStatuses = ['fully_booked', 'blocked', 'maintenance'];
-
-    const overlapCount = await Inventory.countDocuments({
+    // Only 'accepted' bookings block dates
+    const overlapCount = await Booking.countDocuments({
       listingId: id,
-      // status: { $in: blockingStatuses },
+      status: 'accepted',
       checkInDate: { $lt: end },
       checkOutDate: { $gt: start },
     });
@@ -135,33 +220,36 @@ const getListing = asyncHandler(async(req, res) => {
     availability = overlapCount === 0;
   }
 
-  // Fetch blocked inventory for the next 3 months starting today
+  // Fetch blocked bookings for the next 3 months starting today
   const today = new Date();
   const threeMonthsLater = new Date();
   threeMonthsLater.setMonth(today.getMonth() + 3);
 
-  const blockingStatuses = ['fully_booked', 'blocked', 'maintenance'];
-
-  // Find blocked inventory for this listing in the next 3 months
-  const blockedInventory = await Inventory.find({
+  // Find accepted bookings for this listing in the next 3 months
+  const blockedBookings = await Booking.find({
     listingId: id,
-    // status: { $in: blockingStatuses },
+    status: 'accepted',
     checkInDate: { $lt: threeMonthsLater },
     checkOutDate: { $gt: today },
   }).lean();
 
   // Map to array of blocked date ranges
-  const blockedDates = blockedInventory.map((item) => ({
+  const blockedDates = blockedBookings.map((item) => ({
     checkInDate: item.checkInDate,
     checkOutDate: item.checkOutDate,
-    status: item.status,
+    status: item.status, // always 'accepted'
   }));
+
+  // listing.rating = (Math.random() * 5).toFixed(1);  // Random rating between 0 and 5, rounded to 1 decimal
+  // console.log(`listing: `, listing);
 
   res.status(200).json({
     message: 'Listing fetched successfully',
-    data: listing,
-    availability,
-    blockedDates,
+    data: {
+      listing,
+      availability,
+      blockedDates,
+    },
   });
 
 });
@@ -183,8 +271,9 @@ const recentlyViewed = asyncHandler(async(req, res) => {
   //   }),
   // );
 
-  if (!user) {
-    throw new NotFoundError('User doesn\'t exist');
+  if (user && user.recentlyViewed) {
+    // Sort the recentlyViewed array by viewedAt (latest viewed first)
+    user.recentlyViewed.sort((a, b) => new Date(b.viewedAt) - new Date(a.viewedAt));
   }
 
   res.status(200).json({
@@ -260,4 +349,4 @@ const deleteListing = asyncHandler(async(req, res) => {
   });
 });
 
-export { registerListing, getMyListings, getListing, recentlyViewed, getNearbyListings, updateListing, deleteListing, searchListings };
+export { registerListing, getMyListings, getListings, getListing, recentlyViewed, getNearbyListings, updateListing, deleteListing, searchListings };
