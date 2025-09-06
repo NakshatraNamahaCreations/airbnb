@@ -3,7 +3,7 @@ import userRoutes from './user.routes.js';
 import adminRoutes from './admin.routes.js';
 import listingRoutes from './listing.routes.js';
 import uploadRoutes from './upload.routes.js';
-import collectionRoutes from './collection.routes.js';
+import wishlistRoutes from './wishlist.routes.js';
 import bookingsRoutes from './booking.routes.js';
 import featuredRoutes from './featured.routes.js';
 import feedbackRoutes from './feedback.routes.js';
@@ -15,7 +15,7 @@ const registerRoutes = (app) => {
   app.use('/api/v1/admin', adminRoutes);
   app.use('/api/v1/users', userRoutes);
   app.use('/api/v1/listings', listingRoutes);
-  app.use('/api/v1/collections', collectionRoutes);
+  app.use('/api/v1/wishlists', wishlistRoutes);
   app.use('/api/v1/bookings', bookingsRoutes);
   app.use('/api/v1/uploads', uploadRoutes);
   app.use('/api/v1/featured-areas', featuredRoutes);
@@ -25,4 +25,3 @@ const registerRoutes = (app) => {
 };
 
 export default registerRoutes;
-  

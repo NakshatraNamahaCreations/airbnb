@@ -1,8 +1,8 @@
 import mongoose from 'mongoose';
 
 const feedbackSchema = new mongoose.Schema({
-  listingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Listing', required: true },
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  listing: { type: mongoose.Schema.Types.ObjectId, ref: 'Listing', required: true },
+  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   rating: {
     type: Number,
     min: 1, // assuming rating is between 1 and 5

@@ -1,5 +1,5 @@
 import asyncHandler from '../middlewares/asynchandler.js';
-import Collection from '../models/collection.model.js';
+import Wishlist from '../models/wishlist.model.js';
 import Favorite from '../models/favorite.model.js';
 import FeaturedArea from '../models/featured.model.js';
 import Listing from '../models/listing.model.js';
@@ -28,16 +28,16 @@ const getFeatured = asyncHandler(async(req, res) =>{
   // console.log('areas: ', {...areas[0], parsedCoords: areas[0].location.coordinates.map(x => parseFloat(x))});
   console.log('areas[0]: ', areas[0]);
 
-  // fetch user collections once
-  const userCollections = await Collection.find({ user: userId }).select('_id').lean();
+  // fetch user wishlists once
+  const userWishlists = await Wishlist.find({ user: userId }).select('_id').lean();
 
   // fetch favorites once
-  const favs = await Favorite.find({ collectionId: { $in: userCollections } })
-    .select('listingId')
+  const favs = await Favorite.find({ wishlist: { $in: userWishlists } })
+    .select('listing')
     .lean();
 
   // build a Set of favorited listing IDs
-  const favSet = new Set(favs.map((f) => f.listingId.toString()));
+  const favSet = new Set(favs.map((f) => f.listing.toString()));
 
   const results = await Promise.all(areas.map(async(area) => {
     const listings = await Listing.find({

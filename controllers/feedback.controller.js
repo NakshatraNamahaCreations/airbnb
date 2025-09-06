@@ -10,7 +10,7 @@ const addRating = async(req, res) => {
     const { userId } = req;
 
     const newFeedback = await Feedback.findOneAndUpdate(
-      { userId: userId, listingId: listingId },
+      { user: userId, listing: listingId },
       { rating, reviewText },
       { upsert: true, new: true, setDefaultsOnInsert: true },
     );
@@ -29,7 +29,7 @@ const getListingRatings = async(req, res) => {
   try {
     const { listingId } = req.params;
 
-    const feedbacks = await Feedback.find({ listingId: listingId })
+    const feedbacks = await Feedback.find({ listing: listingId })
       .populate('userId', 'name')
       .sort({ createdAt: -1 });
 
@@ -49,8 +49,8 @@ const getListingAverageRating = async(req, res) => {
     const { listingId } = req.params;
 
     const result = await Feedback.aggregate([
-      { $match: { listingId: new mongoose.Types.ObjectId(listingId) } },
-      { $group: { _id: '$listingId', avgRating: { $avg: '$rating' }, total: { $sum: 1 } } },
+      { $match: { listing: new mongoose.Types.ObjectId(listingId) } },
+      { $group: { _id: '$listing', avgRating: { $avg: '$rating' }, total: { $sum: 1 } } },
     ]);
 
     res.status(200).json(

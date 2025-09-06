@@ -3,7 +3,7 @@ import { NotFoundError } from '../utils/error.js';
 import asynchandler from '../middlewares/asynchandler.js';
 import { recentlyViewed } from './listing.controller.js';
 import Listing from '../models/listing.model.js';
-import Collection from '../models/collection.model.js';
+import Wishlist from '../models/wishlist.model.js';
 import Favorite from '../models/favorite.model.js';
 
 
@@ -115,14 +115,14 @@ const myWishlist = asynchandler(async(req, res) => {
       viewedAt: item.viewedAt,
     }));
 
-  const collections0 = await Listing.aggregate([
+  const wishlistsWithImages0 = await Listing.aggregate([
     // Sort listings by createdAt descending
     { $sort: { createdAt: -1 } },
-    // Group by collection/category
+    // Group by wishlist
     {
       $group: {
-        _id: '$collection', // Change to your field name
-        name: { $first: '$collection' }, // Collection name
+        _id: '$wishlist', // Change to your field name
+        name: { $first: '$wishlist' }, // Wishlist name
         imageUrl: { $first: { $arrayElemAt: ['$imageUrls', 0] } }, // First image of latest listing
       },
     },
@@ -136,11 +136,11 @@ const myWishlist = asynchandler(async(req, res) => {
     },
   ]);
 
-  console.time('collectionsWithImages');
-  const collections = await Collection.find({ user: userId }).lean();
+  console.time('wishlistsWithImages');
+  const wishlists = await Wishlist.find({ user: userId }).lean();
 
-  // const collectionsWithImages0 = await Promise.all(collections.map(async(col) => {
-  //   const latestFavorite = await Favorite.findOne({ collectionId: col._id })
+  // const wishlistsWithImages0 = await Promise.all(wishlists.map(async(wishlist) => {
+  //   const latestFavorite = await Favorite.findOne({ wishlistId: wishlist._id })
   //     .sort({ createdAt: -1 })
   //     .populate({ path: 'listingId', select: 'imageUrls' })
   //     .lean();
@@ -150,22 +150,22 @@ const myWishlist = asynchandler(async(req, res) => {
   //     imageUrl: latestFavorite?.listingId?.imageUrls?.[0] || null,
   //   };
   // }));
-  // console.timeEnd('collectionsWithImages');
+  // console.timeEnd('wishlistsWithImages');
 
 
-  const collectionsWithImages1 = await Favorite.aggregate([
-    // Join with collections to get collection name and user
+  const wishlistsWithImages1 = await Favorite.aggregate([
+    // Join with wishlists to get wishlist name and user
     {
       $lookup: {
-        from: 'collections',
-        localField: 'collectionId',
+        from: 'wishlists',
+        localField: 'wishlistId',
         foreignField: '_id',
-        as: 'collection',
+        as: 'wishlist',
       },
     },
-    { $unwind: '$collection' },
-    // Only collections belonging to this user
-    { $match: { 'collection.user': user._id } },
+    { $unwind: '$wishlist' },
+    // Only wishlists belonging to this user
+    { $match: { 'wishlist.user': user._id } },
     // Join with listings to get imageUrls
     {
       $lookup: {
@@ -176,13 +176,13 @@ const myWishlist = asynchandler(async(req, res) => {
       },
     },
     { $unwind: '$listing' },
-    // Sort so latest favorite is first per collection
+    // Sort so latest favorite is first per wishlist
     { $sort: { 'createdAt': -1 } },
-    // Group by collection, pick first listing image
+    // Group by wishlist, pick first listing image
     {
       $group: {
-        _id: '$collection._id',
-        name: { $first: '$collection.name' },
+        _id: '$wishlist._id',
+        name: { $first: '$wishlist.name' },
         imageUrl: { $first: { $arrayElemAt: ['$listing.imageUrls', 0] } },
         favoritedAt: { $first: '$createdAt' },
       },
@@ -201,14 +201,14 @@ const myWishlist = asynchandler(async(req, res) => {
     { $limit: limit },
   ]);
 
-  const collectionsWithImages = await Collection.aggregate([
+  const wishlistsWithImages = await Wishlist.aggregate([
     { $match: { user: user._id } },
 
     {
       $lookup: {
         from: 'favorites',
         localField: '_id',
-        foreignField: 'collectionId',
+        foreignField: 'wishlistId',
         as: 'favorites',
       },
     },
@@ -268,12 +268,12 @@ const myWishlist = asynchandler(async(req, res) => {
 
 
 
-  console.timeEnd('collectionsWithImages');
+  console.timeEnd('wishlistsWithImages');
 
 
   res.status(200).json({
     message: 'Recently viewed images fetched successfully',
-    data: { recentlyViewedImages, collectionsWithImages },
+    data: { recentlyViewedImages, wishlistsWithImages },
   });
 });
 

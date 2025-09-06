@@ -37,7 +37,7 @@ const userSchema = mongoose.Schema({
       ifsc: String,
     },
     documents: [String], // e.g., ID proof, property verification
-    collectionIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Collection' }],  // enforce max 10–20
+    wishlistIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Wishlist' }],  // enforce max 10–20
   },
 }, { timestamps: true },
 );

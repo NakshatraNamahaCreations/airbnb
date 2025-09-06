@@ -1,5 +1,5 @@
 import express from 'express';
-import { createCollection, getMyCollections, getCollection, addToCollection, removeFromCollection, updateCollection, deleteCollection } from '../controllers/collection.controller.js';
+import { createCollection, getMyCollections, getCollection, addToCollection, removeFromCollection, updateCollection, deleteCollection } from '../controllers/wishlist.controller.js';
 import { authenticate } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();

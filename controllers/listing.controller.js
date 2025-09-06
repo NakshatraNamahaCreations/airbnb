@@ -2,10 +2,11 @@ import asyncHandler from '../middlewares/asynchandler.js';
 import { AuthError, NotFoundError } from '../utils/error.js';
 import { apiLogger } from '../utils/logger.js';
 import Listing from '../models/listing.model.js';
-import Collection from '../models/collection.model.js';
+import Wishlist from '../models/wishlist.model.js';
 import User from '../models/user.model.js';
 import mongoose from 'mongoose';
 import Booking from '../models/booking.model.js';
+import Favorite from '../models/favorite.model.js';
 
 
 
@@ -85,7 +86,10 @@ const getMyListings = asyncHandler(async(req, res) => {
 
   res.status(200).json({
     message: 'host listings',
-    data: listings,
+    data: {
+      count: listings.length,
+      listings,
+    },
   });
 
 });
@@ -93,7 +97,7 @@ const getMyListings = asyncHandler(async(req, res) => {
 const getListings = asyncHandler(async(req, res) => {
   const { userId } = req;
 
-  const listings = await Listing.find({ hostId: userId }).lean();
+  const listings = await Listing.find().lean();
 
   // listings.map((listing) => {
   //   listing.rating = (Math.random() * 5).toFixed(1);  // Random rating between 0 and 5, rounded to 1 decimal
@@ -101,29 +105,33 @@ const getListings = asyncHandler(async(req, res) => {
 
   res.status(200).json({
     message: 'host listings',
-    data: listings,
+    data: {
+      count: listings.length,
+      listings,
+    },
   });
 
 });
 
+// if (searchQuery && searchQuery.trim() !== '') {
+//   const searchQueryTrimmed = searchQuery.trim();
+//   // Example: add basic title/address regex search later if needed
+//   filter.$or = [
+//     { title: { $regex: searchQueryTrimmed, $options: 'i' } },
+//     { address: { $regex: searchQueryTrimmed, $options: 'i' } },
+//   ];
+// }
+
+// if (state) {
+//   filter.state = state;
+// }
 
 const searchListings = asyncHandler(async(req, res) => {
-  const { searchQuery, checkInDate, checkOutDate, state } = req.body;
+  const { userId } = req;
+  const { searchQuery, checkInDate, checkOutDate, location } = req.body;
+  const { latitude, longitude, radius = 3000 } = location;
 
   let filter = {};
-
-  // if (searchQuery && searchQuery.trim() !== '') {
-  //   const searchQueryTrimmed = searchQuery.trim();
-  //   // Example: add basic title/address regex search later if needed
-  //   filter.$or = [
-  //     { title: { $regex: searchQueryTrimmed, $options: 'i' } },
-  //     { address: { $regex: searchQueryTrimmed, $options: 'i' } },
-  //   ];
-  // }
-
-  if (state) {
-    filter.state = state;
-  }
 
   // If dates provided, exclude listings that are blocked/fully_booked/maintenance overlapping those dates
   if (checkInDate && checkOutDate) {
@@ -134,8 +142,8 @@ const searchListings = asyncHandler(async(req, res) => {
 
     const blocked = await Booking.find({
       // status: { $in: blockingStatuses },
-      checkInDate: { $lt: end },
-      checkOutDate: { $gt: start },
+      checkInDate: { $lte: end },
+      checkOutDate: { $gte: start },
     }).distinct('listingId');
 
     if (blocked.length > 0) {
@@ -143,31 +151,94 @@ const searchListings = asyncHandler(async(req, res) => {
     }
   }
 
-  const listings = await Listing.aggregate([
-    { $match: filter },  // Apply your filter condition
-    {
-      $project: {
-        title: 1,
-        state: 1,
-        address: 1,
-        pricePerNight: 1,
-        rating: 1,
-        imageUrls: { $arrayElemAt: ['$imageUrls', 0] },  // Get only the first image
+  console.log({ longitude, latitude });
+  console.log('parsed long: ', parseFloat(longitude), 'parsed lat: ', parseFloat(latitude));
+  console.log('typeof userId:', typeof userId, userId);
+
+  const fav = await Favorite.findOne({ listing: '68b935cc8ddf57fc8ec805a0', user: '68afe4a19200e5d00c4e1d81' });
+  console.log('Direct favorite check:', fav);
+
+
+  const nearbyListings = await Listing.aggregate([{
+    $geoNear: {
+      near: {
+        type: 'Point',
+        coordinates: [parseFloat(longitude), parseFloat(latitude)], // Search from these coordinates
       },
+      distanceField: 'distance', // Field to store the calculated distance
+      maxDistance: parseInt(radius), // Limit the search by radius (in meters)
+      spherical: true, // Use spherical geometry for accurate distance calculation
     },
+  },
   ]);
+
+  const pipeline = [{
+    $geoNear: {
+      near: {
+        type: 'Point',
+        coordinates: [parseFloat(longitude), parseFloat(latitude)], // [lng, lat]
+        // coordinates: [78.4345, 17.4126], // [lng, lat]
+      },
+      distanceField: 'distance',
+      maxDistance: parseInt(radius), // in meters
+      // maxDistance: 3000, // in meters
+      spherical: true,
+      query: filter, // apply your filter conditions here
+    },
+  }, {
+    $lookup: {
+      from: 'favorites',                // wishlist name in MongoDB
+      let: { listingId: '$_id' },       // pass current listingId
+      pipeline: [
+        {
+          $match: {
+            $expr: {
+              $and: [
+                { $eq: ['$listing', '$$listingId'] },
+                // { $eq: ['$user', new mongoose.Types.ObjectId(userId)] }, // current logged-in user
+                { $eq: ['$user', userId] }, // current logged-in user
+                // { $eq: ['$user', { $toObjectId: userId.toString() }] }
+              ],
+            },
+          },
+        },
+      ],
+      as: 'favorites',
+    },
+  }, {
+    $addFields: {
+      isFavorited: { $gt: [{ $size: '$favorites' }, 0] }, // true if any favorite exists
+    },
+  },
+  {
+    $project: {
+      title: 1,
+      // state: 1,
+      address: 1,
+      pricePerNight: 1,
+      rating: 1,
+      imageUrls: { $arrayElemAt: ['$imageUrls', 0] },
+      distance: 1, // include calculated distance
+      isFavorited: 1,
+    },
+  }];
+
+  const listings = await Listing.aggregate(pipeline);
+
+
 
   // listings.map((listing) => {
   //   listing.rating = (Math.random() * 5).toFixed(1);  // Random rating between 0 and 5, rounded to 1 decimal
   // });
 
-  console.log(listings);
+  console.log('listings: ', listings);
 
 
   res.status(200).json({
     message: 'searchListings',
     count: listings.length,
-    data: listings,
+    // data: { listings, nearbyListings },
+    data: nearbyListings,
   });
 });
 
@@ -262,6 +333,8 @@ const recentlyViewed = asyncHandler(async(req, res) => {
     .populate('recentlyViewed.listing') // populate listing docs
     .lean();
 
+  console.log('user: ', user);
+
 
   // // populate recentviewed with listing
   // user.recentlyViewed = await Promise.all(
@@ -278,6 +351,7 @@ const recentlyViewed = asyncHandler(async(req, res) => {
 
   res.status(200).json({
     message: 'Recently viewed',
+    count: user.recentlyViewed.length,
     data: user.recentlyViewed,
   });
 });
