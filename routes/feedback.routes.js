@@ -1,15 +1,18 @@
 import express from 'express';
-import { addRating, getListingRatings, getListingAverageRating } from '../controllers/feedback.controller.js';
+import { addFeedback, getFeedbacks, getListingAverageRating, updateFeedback, deleteFeedback } from '../controllers/feedback.controller.js';
 
 const router = express.Router();
 
 // POST /api/v1/ratings/:listingId → add/update rating
-router.post('/:listingId', addRating);
+router.post('/:listingId', addFeedback);
 
 // GET /api/v1/ratings/:listingId → get all ratings for listing
-router.get('/:listingId', getListingRatings);
+router.get('/:listingId', getFeedbacks);
 
 // GET /api/v1/ratings/:listingId/average → get average rating
 router.get('/:listingId/average', getListingAverageRating);
+
+router.put('/:listingId', updateFeedback);
+router.delete('/:listingId', deleteFeedback);
 
 export default router;

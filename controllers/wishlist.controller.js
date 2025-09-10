@@ -7,28 +7,58 @@ import User from '../models/user.model.js';
 import Favorite from '../models/favorite.model.js';
 import mongoose from 'mongoose';
 
-const createWishlist = asyncHandler(async(req, res) => {
+const createWishlist = async(req, res) => {
   const { userId } = req;
-  const { name } = req.body;
+  const { name, listingId } = req.body;
 
-  const existingWishlist = await Wishlist.findOne({ name, user: userId });
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-  if (existingWishlist) {
-    throw new ConflictError('Wishlist already exists');
+  try {
+    const normalizedName = name.trim().toLowerCase();
+    const existingWishlist = await Wishlist.findOne({ name: normalizedName, user: userId });
+
+    if (existingWishlist) {
+      throw new ConflictError('Wishlist already exists');
+    }
+
+    const wishlist = new Wishlist({
+      name: normalizedName,
+      user: userId,
+    });
+
+    await wishlist.save({ session });
+
+    if(listingId){
+      const listing = await Listing.findById(listingId).lean();
+
+      if (!listing) {
+        throw new NotFoundError('Listing doesn\'t exist');
+      }
+
+      const favorite = new Favorite({
+        user: userId,
+        listing,
+        wishlist: wishlist._id,
+      });
+
+      await favorite.save({ session });
+    }
+
+    await session.commitTransaction();
+
+    res.status(201).json({
+      message: 'Wishlist created successfully',
+      data: wishlist,
+    });
+  } catch (error) {
+    console.log(error);
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
   }
-
-  const wishlist = new Wishlist({
-    name,
-    user: userId,
-  });
-
-  await wishlist.save();
-
-  res.status(201).json({
-    message: 'Wishlist created successfully',
-    data: wishlist,
-  });
-});
+};
 
 
 const getMyWishlists = asyncHandler(async(req, res) => {
@@ -54,84 +84,99 @@ const getWishlist = asyncHandler(async(req, res) => {
     throw new NotFoundError('Invalid ID');
   }
 
-  const wishlist1 = await Wishlist.aggregate([
-    { $match: { _id: new mongoose.Types.ObjectId(id) } },
+  // const wishlist1 = await Wishlist.aggregate([
+  //   { $match: { _id: new mongoose.Types.ObjectId(id) } },
 
-    // join favorites
-    {
-      $lookup: {
-        from: 'favorites',
-        localField: '_id',
-        foreignField: 'wishlistId',
-        as: 'favorites',
-      },
-    },
+  //   // join favorites
+  //   {
+  //     $lookup: {
+  //       from: 'favorites',
+  //       localField: '_id',
+  //       foreignField: 'wishlistId',
+  //       as: 'favorites',
+  //     },
+  //   },
 
-    // unwind favorites to join with listings
-    { $unwind: { path: '$favorites', preserveNullAndEmptyArrays: true } },
+  //   // unwind favorites to join with listings
+  //   { $unwind: { path: '$favorites', preserveNullAndEmptyArrays: true } },
 
-    // join listings
-    {
-      $lookup: {
-        from: 'listings',
-        localField: 'favorites.listingId',
-        foreignField: '_id',
-        as: 'listingDetails',
-      },
-    },
+  //   // join listings
+  //   {
+  //     $lookup: {
+  //       from: 'listings',
+  //       localField: 'favorites.listingId',
+  //       foreignField: '_id',
+  //       as: 'listingDetails',
+  //     },
+  //   },
 
-    // group back so you don’t get duplicate wishlist docs
-    {
-      $group: {
-        _id: '$_id',
-        name: { $first: '$name' },
-        user: { $first: '$user' },
-        createdAt: { $first: '$createdAt' },
-        listings: { $push: { $first: '$listingDetails' } },
-      },
-    },
+  //   // group back so you don’t get duplicate wishlist docs
+  //   {
+  //     $group: {
+  //       _id: '$_id',
+  //       name: { $first: '$name' },
+  //       user: { $first: '$user' },
+  //       createdAt: { $first: '$createdAt' },
+  //       listings: { $push: { $first: '$listingDetails' } },
+  //     },
+  //   },
 
 
-  ]);
+  // ]);
 
-  const wishlist = await Wishlist.aggregate([
-    { $match: { _id: new mongoose.Types.ObjectId(id) } },
+  // const wishlist = await Wishlist.aggregate([
+  //   { $match: { _id: new mongoose.Types.ObjectId(id) } },
 
-    {
-      $lookup: {
-        from: 'favorites',
-        let: { collId: '$_id' },
-        pipeline: [
-          { $match: { $expr: { $eq: ['$wishlistId', '$$collId'] } } },
+  //   {
+  //     $lookup: {
+  //       from: 'favorites',
+  //       let: { collId: '$_id' },
+  //       pipeline: [
+  //         { $match: { $expr: { $eq: ['$wishlistId', '$$collId'] } } },
 
-          // join listings for each favorite
-          {
-            $lookup: {
-              from: 'listings',
-              localField: 'listingId',
-              foreignField: '_id',
-              as: 'listing',
-            },
-          },
-          { $unwind: '$listing' },
+  //         // join listings for each favorite
+  //         {
+  //           $lookup: {
+  //             from: 'listings',
+  //             localField: 'listingId',
+  //             foreignField: '_id',
+  //             as: 'listing',
+  //           },
+  //         },
+  //         { $unwind: '$listing' },
 
-          // project only the listing
-          { $replaceRoot: { newRoot: '$listing' } },
-        ],
-        as: 'listings',
-      },
-    },
+  //         // project only the listing
+  //         { $replaceRoot: { newRoot: '$listing' } },
+  //       ],
+  //       as: 'listings',
+  //     },
+  //   },
 
-  ]);
+  // ]);
 
-  if (!wishlist) {
-    throw new NotFoundError('Wishlist doesn\'t exist');
+  // if (!wishlist) {
+  //   throw new NotFoundError('Wishlist doesn\'t exist');
+  // }
+
+  // Validate ObjectId
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ message: 'Invalid wishlist ID' });
+  }
+  // Fetch favorites tied to this wishlist and populate both listing + wishlist
+  const favorites = await Favorite.find({ wishlist: id, user: userId })
+    .populate('listing', 'title imageUrls')   // ✅ bring full listing data
+    // .populate('wishlist')  // ✅ bring wishlist details
+    .lean();
+
+  if (!favorites.length) {
+    return res.status(404).json({ message: 'No favorites found for this wishlist' });
   }
 
 
   res.status(200).json({
     message: 'Wishlist fetched successfully',
-    data: wishlist,
+    count: favorites?.length || 0,
+    data: favorites,
   });
 });
 

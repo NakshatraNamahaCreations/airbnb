@@ -7,7 +7,8 @@ const router = express.Router();
 router.use(authenticate);
 
 router.get('/me', getMe);
-router.get('/my-wishlist', myWishlist);
+// router.get('/my-wishlist', myWishlist);
+router.get('/me/wishlists/overview', myWishlist);
 router.patch('/me/:id', updateMe);
 // router.put('/:id', updateUser);
 

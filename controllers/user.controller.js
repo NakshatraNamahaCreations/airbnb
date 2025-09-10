@@ -136,7 +136,6 @@ const myWishlist = asynchandler(async(req, res) => {
     },
   ]);
 
-  console.time('wishlistsWithImages');
   const wishlists = await Wishlist.find({ user: userId }).lean();
 
   // const wishlistsWithImages0 = await Promise.all(wishlists.map(async(wishlist) => {
@@ -150,7 +149,6 @@ const myWishlist = asynchandler(async(req, res) => {
   //     imageUrl: latestFavorite?.listingId?.imageUrls?.[0] || null,
   //   };
   // }));
-  // console.timeEnd('wishlistsWithImages');
 
 
   const wishlistsWithImages1 = await Favorite.aggregate([
@@ -249,7 +247,7 @@ const myWishlist = asynchandler(async(req, res) => {
     // ✅ only now project away sortDate if you don’t want it in response
     {
       $project: {
-        _id: 0,
+        _id: 1,
         name: 1,
         imageUrl: {
           $ifNull: ['$imageUrl', 'https://media.istockphoto.com/id/1147544807/vector/thumbnail-image-vector-graphic.jpg?s=2048x2048&w=is&k=20&c=dFWJz1EFJt7Tq2lA-hgTpSW119YywTWtS4EwU3fpKrE='],
@@ -268,7 +266,6 @@ const myWishlist = asynchandler(async(req, res) => {
 
 
 
-  console.timeEnd('wishlistsWithImages');
 
 
   res.status(200).json({

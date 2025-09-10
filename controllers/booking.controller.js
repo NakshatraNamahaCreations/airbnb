@@ -3,27 +3,39 @@ import asyncHandler from '../middlewares/asynchandler.js';
 import { apiLogger } from '../utils/logger.js';
 import { NotFoundError, ValidationError } from '../utils/error.js';
 import Booking from '../models/booking.model.js';
-import BookingService from '../services/booking.service.js';
+import bookingService from '../services/booking.service.js';
 import paymentService from '../services/payment.service.js';
 import Listing from '../models/listing.model.js';
+import dayjs from 'dayjs';
+import isSameOrAfter from 'dayjs/plugin/isSameOrAfter.js';   // <-- import it
+import isSameOrBefore from 'dayjs/plugin/isSameOrBefore.js'; // optional
+import utc from 'dayjs/plugin/utc.js';
+dayjs.extend(utc);
+
 
 /*
 * dont allow guests less than 1
 */
 const createBooking = async(req, res) => {
-  console.log('createBooking executed ');
+  console.log('createBooking executed');
 
   const session = await mongoose.startSession();
   session.startTransaction();
 
-  try{
+  try {
 
     const { userId } = req;
     const { listingId, checkInDate, checkOutDate, guests, message } = req.body;
 
     console.log('type of checkInDate ', typeof checkInDate);
     console.log('type of checkOutDate ', typeof checkOutDate);
-    if (new Date(checkOutDate) < new Date(checkInDate)) {
+
+    const formattedCheckInDate = dayjs(checkInDate, 'YYYY-MM-DD').format('YYYY-MM-DD');
+    const formattedCheckOutDate = dayjs(checkOutDate, 'YYYY-MM-DD').format('YYYY-MM-DD');
+    console.log('formattedCheckInDate: ', formattedCheckInDate, 'checkin: ', checkInDate);
+    console.log('formattedCheckOutDate: ', formattedCheckOutDate, 'checkout: ', checkOutDate);
+
+    if (new Date(formattedCheckOutDate) < new Date(formattedCheckInDate)) {
       throw new ValidationError('INVALID_DATES', 'Check-out date must be after check-in date');
     }
 
@@ -53,10 +65,10 @@ const createBooking = async(req, res) => {
     }
 
     // For single-unit: just ensure dates are available now (optional early check)
-    const availability = await BookingService.checkAvailability(
+    const availability = await bookingService.checkAvailability(
       listingId,
-      new Date(checkInDate),
-      new Date(checkOutDate),
+      new Date(formattedCheckInDate),
+      new Date(formattedCheckOutDate),
     );
 
     if (!availability.available) {
@@ -72,8 +84,8 @@ const createBooking = async(req, res) => {
       [{
         listingId,
         guestId: userId,
-        checkInDate: new Date(checkInDate),
-        checkOutDate: new Date(checkOutDate),
+        checkInDate: new Date(formattedCheckInDate),
+        checkOutDate: new Date(formattedCheckOutDate),
         guests,
         message,
         status: 'accepted',
@@ -97,7 +109,7 @@ const createBooking = async(req, res) => {
 };
 
 const getAllBookings = asyncHandler(async(req, res) => {
-  console.log('getAll enquires ');
+  console.log('getAll bookings ');
   const { status, assignedTo, startDate, endDate } = req.query;
 
   // Build dynamic filter object
@@ -110,9 +122,26 @@ const getAllBookings = asyncHandler(async(req, res) => {
     if (endDate) filter.createdAt.$lte = new Date(endDate);
   }
 
-  const bookings = await Booking.find(filter).sort({ updatedAt: -1 });
+  const bookings = await Booking.find(filter).sort({ updatedAt: -1 }).lean();
 
-  res.status(200).json({ message: 'Bookings fetched successfully', data: bookings });
+  console.log('bookigs ', bookings);
+
+  // bookings.map((booking) => {
+  //   booking.checkInDate = dayjs(booking.checkInDate).format('YYYY-MM-DD');
+  //   booking.checkOutDate = dayjs(booking.checkOutDate).format('YYYY-MM-DD');
+  // });
+
+  // const formattedBookings = bookings.map((booking) => ({
+  //   checkInDate: booking.checkInDate,
+  //   checkOutDate: booking.checkOutDate,
+  // }));
+
+  // console.log('after formatted bookigs: ', formattedBookings);
+
+  res.status(200).json({
+    message: 'Bookings fetched successfully',
+    data: bookings,
+  });
 });
 
 const acceptBooking = asyncHandler(async(req, res) => {
@@ -132,11 +161,11 @@ const acceptBooking = asyncHandler(async(req, res) => {
     }
 
     if (booking.status !== 'pending') {
-      throw new ValidationError('ENQUIRY_ALREADY_PROCESSED', 'Booking has already been processed');
+      throw new ValidationError('BOOKING_ALREADY_PROCESSED', 'Booking has already been processed');
     }
 
     // Single-unit: create booking window for exact dates
-    await BookingService.createBookingWindow(
+    await bookingService.createBookingWindow(
       booking.listingId,
       booking.checkInDate,
       booking.checkOutDate,
@@ -186,7 +215,7 @@ const rejectBooking = asyncHandler(async(req, res) => {
     }
 
     if (booking.status !== 'pending') {
-      throw new ValidationError('ENQUIRY_ALREADY_PROCESSED', 'Booking has already been processed');
+      throw new ValidationError('BOOKING_ALREADY_PROCESSED', 'Booking has already been processed');
     }
 
     booking.status = 'rejected';
@@ -228,18 +257,27 @@ const getBookingById = asyncHandler(async(req, res) => {
 
 const updateBooking = asyncHandler(async(req, res) => {
   const { id } = req.params;
+  const { userId } = req;
+  const { listingId, guestId, checkInDate, checkOutDate, message, status, guests } = req.body;
+
 
   if (!mongoose.Types.ObjectId.isValid(id)) {
     throw new NotFoundError('Invalid ID');
   }
 
-  const booking = await Booking.findByIdAndUpdate(id, req.body, { new: true });
+  // const booking = await Booking.findByIdAndUpdate(
+  //   id,
+  //   { listingId, guestId, checkInDate, checkOutDate, message, status, guests },
+  //   { new: true },
+  // );
 
-  if (!booking) {
-    throw new NotFoundError('Booking not found');
-  }
+  // if (!booking) {
+  //   throw new NotFoundError('Booking not found');
+  // }
 
-  res.status(200).json({ message: 'Booking updated successfully', data: booking });
+  const updatedBooking = await bookingService.updateBooking(id, userId, req.body);
+
+  res.status(200).json({ message: 'Booking updated successfully', data: updatedBooking });
 });
 
 const deleteBooking = asyncHandler(async(req, res) => {
@@ -261,7 +299,7 @@ const deleteBooking = asyncHandler(async(req, res) => {
     // If accepted, delete the booking window
     if (booking.status === 'accepted') {
       try {
-        await BookingService.deleteBookingWindow(
+        await bookingService.deleteBookingWindow(
           booking.listingId,
           booking.checkInDate,
           booking.checkOutDate,
@@ -289,6 +327,44 @@ const deleteBooking = asyncHandler(async(req, res) => {
   }
 });
 
+const bookingHistory = asyncHandler(async(req, res) => {
+  const { userId } = req;
+
+  const bookings = await Booking.find({ guestId: userId }).sort({ checkInDate: -1 });
+
+
+  dayjs.extend(isSameOrAfter);
+
+  // const today = dayjs().startOf('day');
+
+  // const upcoming = bookings.filter((b) => dayjs(b.checkInDate).isSameOrAfter(today, 'day'));
+  // const previous = bookings.filter((b) => dayjs(b.checkInDate).isBefore(today, 'day'));
+
+
+  const todayUtc = dayjs().utc().startOf('day').toDate();
+  console.log('todayUtc: ', todayUtc);
+
+  // Upcoming = checkInDate >= today
+  const upcoming = await Booking.find({ guestId: userId, checkInDate: { $gte: todayUtc } }).lean();
+
+  // previous = checkOutDate < today
+  const previous = await Booking.find({ guestId: userId, checkOutDate: { $lt: todayUtc } }).lean();
+
+
+  res.status(200).json({
+    message: 'Booking history fetched successfully',
+    meta: {
+      count: bookings.length,
+      upcomingCount: upcoming.length,
+      previousCount: previous.length,
+    },
+    data: {
+      upcoming,
+      previous,
+    },
+  });
+});
+
 export {
   createBooking,
   getAllBookings,
@@ -297,4 +373,5 @@ export {
   deleteBooking,
   acceptBooking,
   rejectBooking,
+  bookingHistory,
 };

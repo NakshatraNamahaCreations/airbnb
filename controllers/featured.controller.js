@@ -6,7 +6,7 @@ import Listing from '../models/listing.model.js';
 
 
 
-const createFeatured = asyncHandler(async(req, res) =>{
+const createFeatured = asyncHandler(async(req, res) => {
   const { name, location, radiusKm } = req.body;
 
   const featured = await FeaturedArea.create({
@@ -21,7 +21,7 @@ const createFeatured = asyncHandler(async(req, res) =>{
   });
 });
 
-const getFeatured = asyncHandler(async(req, res) =>{
+const getFeatured1 = asyncHandler(async(req, res) => {
   const { userId } = req;
 
   const areas = await FeaturedArea.find().lean();
@@ -39,7 +39,8 @@ const getFeatured = asyncHandler(async(req, res) =>{
   // build a Set of favorited listing IDs
   const favSet = new Set(favs.map((f) => f.listing.toString()));
 
-  const results = await Promise.all(areas.map(async(area) => {
+  const results = await Promise.all(areas.map(async(area, i) => {
+
     const listings = await Listing.find({
       location: {
         $geoWithin: {
@@ -65,7 +66,7 @@ const getFeatured = asyncHandler(async(req, res) =>{
     //   },
     // ]);
 
-    console.log('listings: ', listings);
+    // console.log('listings: ', listings);
 
     // map listings → add imageUrl + isFavorited
     const enrichedListings = listings.map((l) => ({
@@ -89,13 +90,97 @@ const getFeatured = asyncHandler(async(req, res) =>{
 
 });
 
+const getFeatured = asyncHandler(async(req, res) => {
 
-const getFeaturedById = asyncHandler(async(req, res) =>{
-  const featured = await FeaturedArea.findById(req.params.id);
+  const { userId } = req;
+
+  const areas = await FeaturedArea.find().lean();
+
+  const results = await Promise.all(
+    areas.map(async(area) => {
+      const listings = await Listing.aggregate([
+        {
+          $geoNear: {
+            near: {
+              type: 'Point',
+              coordinates: [
+                parseFloat(area.location.coordinates[0]),
+                parseFloat(area.location.coordinates[1]),
+              ],
+            },
+            distanceField: 'distance',
+            maxDistance: area.radiusKm * 1000,
+            spherical: true,
+          },
+        },
+        { $limit: 10 },
+        { $sort: { createdAt: -1 } },
+        {
+          $lookup: {
+            from: 'favorites', // collection name
+            let: { listingId: '$_id' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ['$listing', '$$listingId'] },
+                      // { $eq: ["$user", new mongoose.Types.ObjectId(userId)] },
+                      { $eq: ['$user', userId] },
+                    ],
+                  },
+                },
+              },
+            ],
+            as: 'favDocs',
+          },
+        },
+        {
+          $addFields: {
+            isFavorited: { $gt: [{ $size: '$favDocs' }, 0] },
+            imageUrl: { $arrayElemAt: ['$imageUrls', 0] },
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            title: 1,
+            location: 1,
+            imageUrl: 1,
+            isFavorited: 1,
+          },
+        },
+      ]);
+
+      return {
+        name: area.name,
+        enrichedListings: listings,
+      };
+    }),
+  );
+
+  res.status(200).json({
+    message: 'Featured fetched successfully',
+    data: results,
+  });
+});
+
+
+const getFeaturedAdmin = asyncHandler(async(req, res) => {
+  const featured = await FeaturedArea.find().lean();
   res.status(200).json({
     message: 'Featured fetched successfully',
     data: featured,
   });
 });
 
-export { createFeatured, getFeatured, getFeaturedById };
+const getFeaturedById = asyncHandler(async(req, res) => {
+  const featured = await FeaturedArea.findById(req.params.id);
+
+  res.status(200).json({
+    message: 'Featured fetched successfully',
+    data: featured,
+  });
+});
+
+export { createFeatured, getFeatured, getFeaturedById, getFeatured1, getFeaturedAdmin };

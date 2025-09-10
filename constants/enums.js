@@ -136,4 +136,73 @@ const AMENITIES = [
 
 
 
-export { roles, STATES, AMENITIES };
+const SUGGESTED_DESTINATIONS = [{
+  place: 'Hyderabad',
+  latitude: 17.3850,
+  longitude: 78.4867,
+  imageUrl: 'https://air-bnb-cl.s3.ap-south-1.amazonaws.com/listings%2F68afe4a19200e5d00c4e1d81%2F1757403749900_0_farhan-abas-e9t42c3ogmc-unsplash.jpg',
+}, {
+  place: 'Bangalore',
+  state: 'Karnataka',
+  latitude: 12.9716,
+  longitude: 77.5946,
+  imageUrl: 'https://air-bnb-cl.s3.ap-south-1.amazonaws.com/listings%2F68afe4a19200e5d00c4e1d81%2F1757403749900_1_redd-francisco-wtz5qotei88-unsplash.jpg',
+}, {
+  place: 'Mumbai',
+  state: 'Maharashtra',
+  latitude: 19.0760,
+  longitude: 72.8777,
+  imageUrl: 'https://air-bnb-cl.s3.ap-south-1.amazonaws.com/listings%2F68afe4a19200e5d00c4e1d81%2F1757403749900_2_farhan-abas-aixcjm_wt0u-unsplash.jpg',
+},
+{
+  place: 'Delhi',
+  state: 'Delhi',
+  latitude: 28.6139,
+  longitude: 77.2090,
+  imageUrl: 'https://air-bnb-cl.s3.ap-south-1.amazonaws.com/listings%2F68afe4a19200e5d00c4e1d81%2F1757403749900_3_lloyd-alozie-zreio0jjlwc-unsplash.jpg',
+},
+{
+  place: 'Chennai',
+  state: 'Tamil Nadu',
+  latitude: 13.0827,
+  longitude: 80.2707,
+  imageUrl: 'https://air-bnb-cl.s3.ap-south-1.amazonaws.com/listings%2F68afe4a19200e5d00c4e1d81%2F1757403749900_4_artists-eyes-ej_fgjd-day-unsplash.jpg',
+},
+{
+  place: 'Kolkata',
+  state: 'West Bengal',
+  latitude: 22.5726,
+  longitude: 88.3639,
+  imageUrl: 'https://air-bnb-cl.s3.ap-south-1.amazonaws.com/listings%2F68afe4a19200e5d00c4e1d81%2F1757403749900_5_datingscout-wb294uetdhu-unsplash.jpg',
+},
+{
+  place: 'Pune',
+  state: 'Maharashtra',
+  latitude: 18.5204,
+  longitude: 73.8567,
+  imageUrl: 'https://air-bnb-cl.s3.ap-south-1.amazonaws.com/listings%2F68afe4a19200e5d00c4e1d81%2F1757403749900_6_erika-m-zb9azmtuysk-unsplash.jpg',
+},
+{
+  place: 'Ahmedabad',
+  state: 'Gujarat',
+  latitude: 23.0225,
+  longitude: 72.5714,
+  imageUrl: 'https://air-bnb-cl.s3.ap-south-1.amazonaws.com/listings%2F68afe4a19200e5d00c4e1d81%2F1757403749900_7_mihai-moisa-dlot3xltxuc-unsplash.jpg',
+},
+{
+  place: 'Jaipur',
+  state: 'Rajasthan',
+  latitude: 26.9124,
+  longitude: 75.7873,
+  imageUrl: 'https://air-bnb-cl.s3.ap-south-1.amazonaws.com/listings%2F68afe4a19200e5d00c4e1d81%2F1757403749900_8_alejandra-cifre-gonzalez-tjmyuptwmi4-unsplash.jpg',
+},
+{
+  place: 'Lucknow',
+  state: 'Uttar Pradesh',
+  latitude: 26.8467,
+  longitude: 80.9462,
+  imageUrl: 'https://air-bnb-cl.s3.ap-south-1.amazonaws.com/listings%2F68afe4a19200e5d00c4e1d81%2F1757403749900_9_florian-olivo-_f2hoc1skk8-unsplash.jpg',
+},
+];
+
+export { roles, STATES, AMENITIES, SUGGESTED_DESTINATIONS };

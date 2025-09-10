@@ -7,6 +7,8 @@ import User from '../models/user.model.js';
 import mongoose from 'mongoose';
 import Booking from '../models/booking.model.js';
 import Favorite from '../models/favorite.model.js';
+import Feedback from '../models/feedback.model.js';
+import dayjs from 'dayjs';
 
 
 
@@ -18,7 +20,7 @@ const registerListing = asyncHandler(async(req, res) => {
     title,
     description,
     imageUrls = [],
-    addressLine,
+    address,
     city,
     state,
     pincode,
@@ -37,7 +39,7 @@ const registerListing = asyncHandler(async(req, res) => {
     title,
     description,
     imageUrls,
-    addressLine,
+    address,
     city,
     state,
     pincode,
@@ -57,7 +59,7 @@ const registerListing = asyncHandler(async(req, res) => {
     title,
     description,
     imageUrls,
-    addressLine,
+    address,
     city,
     state,
     pincode,
@@ -94,7 +96,7 @@ const getMyListings = asyncHandler(async(req, res) => {
 
 });
 
-const getListings = asyncHandler(async(req, res) => {
+const getAllListings = asyncHandler(async(req, res) => {
   const { userId } = req;
 
   const listings = await Listing.find().lean();
@@ -155,7 +157,7 @@ const searchListings = asyncHandler(async(req, res) => {
   console.log('parsed long: ', parseFloat(longitude), 'parsed lat: ', parseFloat(latitude));
   console.log('typeof userId:', typeof userId, userId);
 
-  const fav = await Favorite.findOne({ listing: '68b935cc8ddf57fc8ec805a0', user: '68afe4a19200e5d00c4e1d81' });
+  const fav = await Favorite.findOne({ listing: '68b935cc8ddf57fc8ec805a0', user: userId });
   console.log('Direct favorite check:', fav);
 
 
@@ -236,7 +238,7 @@ const searchListings = asyncHandler(async(req, res) => {
 
   res.status(200).json({
     message: 'searchListings',
-    count: listings.length,
+    count: nearbyListings.length,
     // data: { listings, nearbyListings },
     data: nearbyListings,
   });
@@ -274,6 +276,37 @@ const getListing = asyncHandler(async(req, res) => {
     await user.save();
   }
 
+  // const feedbackStats = await Feedback.aggregate([
+  //   { $match: { listing: new mongoose.Types.ObjectId(id) } },
+
+  //   {
+  //     $group: {
+  //       _id: "$listing",
+  //       avgRating: { $avg: "$rating" },              // average rating
+  //       totalRatings: { $sum: 1 },                   // count all feedbacks
+  //       totalReviews: {
+  //         $sum: {
+  //           $cond: [
+  //             { $and: [ { $ifNull: ["$reviewText", false] }, { $ne: ["$reviewText", ""] } ] },
+  //             1,
+  //             0
+  //           ]
+  //         }
+  //       }
+  //     }
+  //   }
+  // ]);
+
+  // // Get reviews separately (only those with reviewText)
+  // const reviews = await Feedback.find({
+  //   listing: id,
+  //   reviewText: { $exists: true, $ne: "" }
+  // })
+  //   .populate("user", "name avatar") // optional
+  //   .lean();
+
+  // console.log(`feedbacks: `, feedbackStats);
+
 
   // Optional availability check for single-unit listings
   let availability = undefined;
@@ -301,8 +334,10 @@ const getListing = asyncHandler(async(req, res) => {
     listingId: id,
     status: 'accepted',
     checkInDate: { $lt: threeMonthsLater },
-    checkOutDate: { $gt: today },
+    checkOutDate: { $gte: today },
   }).lean();
+
+  console.log('blockedBookings: ', blockedBookings);
 
   // Map to array of blocked date ranges
   const blockedDates = blockedBookings.map((item) => ({
@@ -314,15 +349,53 @@ const getListing = asyncHandler(async(req, res) => {
   // listing.rating = (Math.random() * 5).toFixed(1);  // Random rating between 0 and 5, rounded to 1 decimal
   // console.log(`listing: `, listing);
 
+  // ✅ Feedback aggregation
+  const stats = await Feedback.aggregate([
+    { $match: { listing: new mongoose.Types.ObjectId(id) } },
+    {
+      $group: {
+        _id: '$listing',
+        avgRating: { $avg: '$rating' },
+        totalReviews: {
+          $sum: {
+            $cond: [
+              { $and: [{ $ifNull: ['$reviewText', false] }, { $ne: ['$reviewText', ''] }] },
+              1,
+              0,
+            ],
+          },
+        },
+        totalRatings: { $sum: 1 },
+      },
+    },
+  ]);
+
+  const feedbackSummary =
+    stats[0] || { avgRating: 0, totalRatings: 0, totalReviews: 0 };
+
+  // ✅ Top 10 reviews by rating (then newest among ties)
+  const topReviews = await Feedback.find({
+    listing: id,
+    reviewText: { $exists: true, $ne: '' },
+  })
+    .sort({ rating: -1, createdAt: -1 })
+    .limit(5)
+    .populate('user', 'name createdAt') // optional
+    .lean();
+
+  console.log('topReviews: ', topReviews);
+
+
   res.status(200).json({
     message: 'Listing fetched successfully',
     data: {
       listing,
       availability,
       blockedDates,
+      feedbackSummary, // { avgRating, totalRatings, totalReviews }
+      topReviews,
     },
   });
-
 });
 
 const recentlyViewed = asyncHandler(async(req, res) => {
@@ -389,10 +462,39 @@ const updateListing = asyncHandler(async(req, res) => {
     throw new NotFoundError('Invalid ID');
   }
 
+  const allowedUpdates = [
+    'title',
+    'description',
+    'imageUrls',
+    'address',
+    'city',
+    'state',
+    'pincode',
+    'amenities',
+    'location',
+    'pricePerNight',
+    'currency',
+    'bedrooms',
+    'maxGuests',
+    'capacity',
+    'rating',
+    'houseRules',
+    'safetyAndProperty',
+    'status',
+  ];
+
+  const updateData = {};
+  for (const key of allowedUpdates) {
+    if (req.body[key] !== undefined) {
+      updateData[key] = req.body[key];
+    }
+  }
+
+
   const updated = await Listing.findByIdAndUpdate(
     id,
-    { $set: req.body },   // only update provided fields
-    { new: true, runValidators: true }, // return updated doc + validate
+    { $set: updateData },
+    { new: true, runValidators: true },
   );
 
   if (!updated) {
@@ -423,4 +525,4 @@ const deleteListing = asyncHandler(async(req, res) => {
   });
 });
 
-export { registerListing, getMyListings, getListings, getListing, recentlyViewed, getNearbyListings, updateListing, deleteListing, searchListings };
+export { registerListing, getMyListings, getAllListings, getListing, recentlyViewed, getNearbyListings, updateListing, deleteListing, searchListings };
