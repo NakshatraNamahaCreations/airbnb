@@ -101,10 +101,6 @@ const getAllListings = asyncHandler(async(req, res) => {
 
   const listings = await Listing.find().lean();
 
-  // listings.map((listing) => {
-  //   listing.rating = (Math.random() * 5).toFixed(1);  // Random rating between 0 and 5, rounded to 1 decimal
-  // });
-
   res.status(200).json({
     message: 'host listings',
     data: {
@@ -164,9 +160,6 @@ const searchListings = asyncHandler(async(req, res) => {
   if (infants > 0) filter['capacity.infants'] = { $gte: infants };
   if (pets > 0) filter['capacity.pets'] = { $gte: pets };
   if (totalGuests > 0) filter.maxGuests = { $gte: totalGuests };
-
-  // console.log(`totalGuests: `, totalGuests);
-  // console.log(`filter: `, filter);
 
 
   console.log({ longitude, latitude });

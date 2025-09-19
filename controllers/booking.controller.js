@@ -350,10 +350,70 @@ const bookingHistory = asyncHandler(async(req, res) => {
     .sort({ checkInDate: 1, createdAt: 1 })
     .lean();
 
-  // previous = checkOutDate < today
-  const previous = await Booking.find({ guestId: userId, checkOutDate: { $lt: todayUtc } })
-    .populate('listingId', 'title imageUrls')
-    .lean();
+  // // previous = checkOutDate < today
+  // const previous = await Booking.find({ guestId: userId, checkOutDate: { $lt: todayUtc } })
+  //   .populate('listingId', 'title imageUrls')
+  //   .lean();
+
+  const previous = await Booking.aggregate([
+    {
+      $match: {
+        guestId: new mongoose.Types.ObjectId(userId),
+        checkOutDate: { $lt: todayUtc },
+      },
+    },
+    {
+      $lookup: {
+        from: 'listings',
+        localField: 'listingId',
+        foreignField: '_id',
+        as: 'listing',
+      },
+    },
+    { $unwind: '$listing' },
+
+    // ✅ Lookup this user's feedback for that listing
+    {
+      $lookup: {
+        from: 'feedbacks',
+        let: { listingId: '$listing._id' },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ['$listing', '$$listingId'] },
+                  { $eq: ['$user', new mongoose.Types.ObjectId(userId)] },
+                ],
+              },
+            },
+          },
+          { $project: { rating: 1 } },
+        ],
+        as: 'userFeedback',
+      },
+    },
+
+    {
+      $addFields: {
+        userRating: { $ifNull: [{ $arrayElemAt: ['$userFeedback.rating', 0] }, null] },
+      },
+    },
+
+    {
+      $project: {
+        _id: 1,
+        checkInDate: 1,
+        checkOutDate: 1,
+        listing: {
+          _id: 1,
+          title: 1,
+          imageUrl: { $arrayElemAt: ['$listing.imageUrls', 0] },
+        },
+        userRating: 1, // ✅ rating given by this user
+      },
+    },
+  ]);
 
 
   res.status(200).json({
