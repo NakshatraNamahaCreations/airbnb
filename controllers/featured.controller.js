@@ -91,7 +91,6 @@ const getFeatured1 = asyncHandler(async(req, res) => {
 });
 
 const getFeatured = asyncHandler(async(req, res) => {
-
   const { userId } = req;
 
   const areas = await FeaturedArea.find().lean();
@@ -136,9 +135,37 @@ const getFeatured = asyncHandler(async(req, res) => {
           },
         },
         {
+          $lookup: {
+            from: 'feedbacks', // collection name
+            let: { listingId: '$_id' },
+            pipeline: [
+              { $match: { $expr: { $eq: ['$listing', '$$listingId'] } } },
+              {
+                $group: {
+                  _id: null,
+                  avgRating: { $avg: '$rating' },
+                  // totalRatings: { $sum: 1 },
+                  // totalReviews: {
+                  //   $sum: {
+                  //     $cond: [
+                  //       { $and: [{ $ifNull: ['$reviewText', false] }, { $ne: ['$reviewText', ''] }] },
+                  //       1,
+                  //       0,
+                  //     ],
+                  //   },
+                },
+              },
+            ],
+            as: 'feedbackStats',
+          },
+        },
+        {
           $addFields: {
             isFavorited: { $gt: [{ $size: '$favDocs' }, 0] },
             imageUrl: { $arrayElemAt: ['$imageUrls', 0] },
+            avgRating: { $ifNull: [{ $arrayElemAt: ['$feedbackStats.avgRating', 0] }, 0] },
+            // totalRatings: { $ifNull: [{ $arrayElemAt: ['$feedbackStats.totalRatings', 0] }, 0] },
+            // totalReviews: { $ifNull: [{ $arrayElemAt: ['$feedbackStats.totalReviews', 0] }, 0] },
           },
         },
         {
@@ -149,6 +176,9 @@ const getFeatured = asyncHandler(async(req, res) => {
             imageUrl: 1,
             isFavorited: 1,
             pricePerNight: 1,
+            avgRating: 1,
+            // totalRatings: 1,
+            // totalReviews: 1,
           },
         },
       ]);
