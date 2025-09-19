@@ -49,8 +49,8 @@ const getSuggested = async(req, res, next) => {
     ]);
 
     res.status(200).json({
-      data: items,
       pagination: { total, page: Number(page), limit: Number(limit), pages: Math.ceil(total / Number(limit)) },
+      data: items,
     });
   } catch (err) { next(err); }
 };

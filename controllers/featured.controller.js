@@ -148,6 +148,7 @@ const getFeatured = asyncHandler(async(req, res) => {
             location: 1,
             imageUrl: 1,
             isFavorited: 1,
+            pricePerNight: 1,
           },
         },
       ]);

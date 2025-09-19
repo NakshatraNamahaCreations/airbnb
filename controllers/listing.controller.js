@@ -130,8 +130,11 @@ const getAllListings = asyncHandler(async(req, res) => {
 
 const searchListings = asyncHandler(async(req, res) => {
   const { userId } = req;
-  const { searchQuery, checkInDate, checkOutDate, location } = req.body;
+  const { searchQuery, checkInDate, checkOutDate, location, guests } = req.body;
   const { latitude, longitude, radius = 3000 } = location;
+  const { page = 1, limit = 10 } = req.query; // or req.body
+  const skip = (page - 1) * limit;
+
 
   let filter = {};
 
@@ -153,43 +156,38 @@ const searchListings = asyncHandler(async(req, res) => {
     }
   }
 
+  const { adults = 0, children = 0, infants = 0, pets = 0 } = guests || {};
+  const totalGuests = adults + children;
+
+  if (adults > 0) filter['capacity.adults'] = { $gte: adults };
+  if (children > 0) filter['capacity.children'] = { $gte: children };
+  if (infants > 0) filter['capacity.infants'] = { $gte: infants };
+  if (pets > 0) filter['capacity.pets'] = { $gte: pets };
+  if (totalGuests > 0) filter.maxGuests = { $gte: totalGuests };
+
+  // console.log(`totalGuests: `, totalGuests);
+  // console.log(`filter: `, filter);
+
+
   console.log({ longitude, latitude });
-  console.log('parsed long: ', parseFloat(longitude), 'parsed lat: ', parseFloat(latitude));
-  console.log('typeof userId:', typeof userId, userId);
+  // console.log('parsed long: ', parseFloat(longitude), 'parsed lat: ', parseFloat(latitude));
+  // console.log('typeof userId:', typeof userId, userId);
 
-  const fav = await Favorite.findOne({ listing: '68b935cc8ddf57fc8ec805a0', user: userId });
-  console.log('Direct favorite check:', fav);
-
-
-  const nearbyListings = await Listing.aggregate([{
-    $geoNear: {
-      near: {
-        type: 'Point',
-        coordinates: [parseFloat(longitude), parseFloat(latitude)], // Search from these coordinates
-      },
-      distanceField: 'distance', // Field to store the calculated distance
-      maxDistance: parseInt(radius), // Limit the search by radius (in meters)
-      spherical: true, // Use spherical geometry for accurate distance calculation
-    },
-  },
-  ]);
 
   const pipeline = [{
     $geoNear: {
       near: {
         type: 'Point',
-        coordinates: [parseFloat(longitude), parseFloat(latitude)], // [lng, lat]
-        // coordinates: [78.4345, 17.4126], // [lng, lat]
+        coordinates: [parseFloat(longitude), parseFloat(latitude)],
       },
       distanceField: 'distance',
       maxDistance: parseInt(radius), // in meters
-      // maxDistance: 3000, // in meters
       spherical: true,
       query: filter, // apply your filter conditions here
     },
   }, {
     $lookup: {
-      from: 'favorites',                // wishlist name in MongoDB
+      from: 'favorites',
       let: { listingId: '$_id' },       // pass current listingId
       pipeline: [
         {
@@ -197,9 +195,7 @@ const searchListings = asyncHandler(async(req, res) => {
             $expr: {
               $and: [
                 { $eq: ['$listing', '$$listingId'] },
-                // { $eq: ['$user', new mongoose.Types.ObjectId(userId)] }, // current logged-in user
-                { $eq: ['$user', userId] }, // current logged-in user
-                // { $eq: ['$user', { $toObjectId: userId.toString() }] }
+                { $eq: ['$user', new mongoose.Types.ObjectId(userId)] },
               ],
             },
           },
@@ -214,13 +210,16 @@ const searchListings = asyncHandler(async(req, res) => {
   },
   {
     $project: {
+      capacity: 1,
+      maxGuests: 1,
       title: 1,
       // state: 1,
       address: 1,
       pricePerNight: 1,
       rating: 1,
+      location: 1,
       imageUrls: { $arrayElemAt: ['$imageUrls', 0] },
-      distance: 1, // include calculated distance
+      distance: 1,
       isFavorited: 1,
     },
   }];
@@ -229,18 +228,10 @@ const searchListings = asyncHandler(async(req, res) => {
 
 
 
-  // listings.map((listing) => {
-  //   listing.rating = (Math.random() * 5).toFixed(1);  // Random rating between 0 and 5, rounded to 1 decimal
-  // });
-
-  console.log('listings: ', listings);
-
-
   res.status(200).json({
     message: 'searchListings',
-    count: nearbyListings.length,
-    // data: { listings, nearbyListings },
-    data: nearbyListings,
+    count: listings.length,
+    data: listings,
   });
 });
 
@@ -337,7 +328,7 @@ const getListing = asyncHandler(async(req, res) => {
     checkOutDate: { $gte: today },
   }).lean();
 
-  console.log('blockedBookings: ', blockedBookings);
+  // console.log('blockedBookings: ', blockedBookings);
 
   // Map to array of blocked date ranges
   const blockedDates = blockedBookings.map((item) => ({
@@ -346,8 +337,14 @@ const getListing = asyncHandler(async(req, res) => {
     status: item.status, // always 'accepted'
   }));
 
-  // listing.rating = (Math.random() * 5).toFixed(1);  // Random rating between 0 and 5, rounded to 1 decimal
-  // console.log(`listing: `, listing);
+
+  const favorite = await Favorite.find({
+    listing: id,
+    user: userId,
+  }).lean();
+
+
+  const isFavorited = (favorite.length > 0) ? true : false;
 
   // ✅ Feedback aggregation
   const stats = await Feedback.aggregate([
@@ -383,13 +380,14 @@ const getListing = asyncHandler(async(req, res) => {
     .populate('user', 'name createdAt') // optional
     .lean();
 
-  console.log('topReviews: ', topReviews);
+  // console.log('topReviews: ', topReviews);
 
 
   res.status(200).json({
     message: 'Listing fetched successfully',
     data: {
       listing,
+      isFavorited,
       availability,
       blockedDates,
       feedbackSummary, // { avgRating, totalRatings, totalReviews }
@@ -411,7 +409,7 @@ const recentlyViewed = asyncHandler(async(req, res) => {
 
   // // populate recentviewed with listing
   // user.recentlyViewed = await Promise.all(
-  //   user.recentlyViewed.map(async (item) => {
+  //   user.recentlyViewed.map(async(item) => {
   //     const listing = await Listing.findById(item.listing).lean();
   //     return { ...item, listing };
   //   }),

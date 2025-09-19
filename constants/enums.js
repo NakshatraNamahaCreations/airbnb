@@ -80,6 +80,7 @@ const STATES = [
 
 const AMENITIES = [
   'WiFi',
+  'Swimming Pool',
   'Air Conditioning',
   'Heating',
   'Kitchen',

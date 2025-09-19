@@ -29,7 +29,7 @@ const createWishlist = async(req, res) => {
 
     await wishlist.save({ session });
 
-    if(listingId){
+    if (listingId) {
       const listing = await Listing.findById(listingId).lean();
 
       if (!listing) {
@@ -168,9 +168,9 @@ const getWishlist = asyncHandler(async(req, res) => {
     // .populate('wishlist')  // ✅ bring wishlist details
     .lean();
 
-  if (!favorites.length) {
-    return res.status(404).json({ message: 'No favorites found for this wishlist' });
-  }
+  // if (!favorites.length) {
+  //   return res.status(404).json({ message: 'No favorites found for this wishlist' });
+  // }
 
 
   res.status(200).json({
@@ -228,13 +228,6 @@ const toggleWishlist = asyncHandler(async(req, res) => {
   const { userId } = req;
   const { wishlistId, listingId } = req.body;
 
-  const wishlist = await Wishlist.findById(wishlistId)
-    .lean();
-
-  if (!wishlist) {
-    throw new NotFoundError('Wishlist doesn\'t exist');
-  }
-
   const listing = await Listing.findById(listingId).lean();
 
   if (!listing) {
@@ -248,7 +241,7 @@ const toggleWishlist = asyncHandler(async(req, res) => {
   // );
 
   // Check if favorite exists
-  const favorite = await Favorite.findOne({ wishlist: wishlistId, listing: listingId, user: userId });
+  const favorite = await Favorite.findOne({ listing: listingId, user: userId });
 
   if (favorite) {
     // If it exists, remove it
@@ -258,13 +251,21 @@ const toggleWishlist = asyncHandler(async(req, res) => {
       data: favorite,
     });
   } else {
-    // If it doesn't exist, create it
+
+    const wishlist = await Wishlist.findById(wishlistId)
+      .lean();
+
+    if (!wishlist) {
+      throw new NotFoundError('Wishlist doesn\'t exist');
+    }
+    // If fav doesn't exist, create it
     const newFavorite = new Favorite({
       wishlist: wishlistId,
       listing: listingId,
       user: userId,
     });
     await newFavorite.save();
+
     return res.status(201).json({
       message: 'Favorite added to wishlist',
       data: newFavorite,

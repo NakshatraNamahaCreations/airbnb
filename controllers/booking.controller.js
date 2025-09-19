@@ -345,16 +345,21 @@ const bookingHistory = asyncHandler(async(req, res) => {
   console.log('todayUtc: ', todayUtc);
 
   // Upcoming = checkInDate >= today
-  const upcoming = await Booking.find({ guestId: userId, checkInDate: { $gte: todayUtc } }).lean();
+  const upcoming = await Booking.find({ guestId: userId, checkInDate: { $gte: todayUtc } })
+    .populate('listingId', 'title imageUrls')
+    .sort({ checkInDate: 1, createdAt: 1 })
+    .lean();
 
   // previous = checkOutDate < today
-  const previous = await Booking.find({ guestId: userId, checkOutDate: { $lt: todayUtc } }).lean();
+  const previous = await Booking.find({ guestId: userId, checkOutDate: { $lt: todayUtc } })
+    .populate('listingId', 'title imageUrls')
+    .lean();
 
 
   res.status(200).json({
     message: 'Booking history fetched successfully',
-    meta: {
-      count: bookings.length,
+    count: {
+      allBookings: bookings.length,
       upcomingCount: upcoming.length,
       previousCount: previous.length,
     },

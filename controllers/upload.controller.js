@@ -2,7 +2,6 @@ import { presignPut } from '../config/s3Client.js';
 import asyncHandler from '../middlewares/asynchandler.js';
 
 
-console.log('upload controller executed ');
 
 // const filesMeta = [
 //   {
