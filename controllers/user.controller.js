@@ -206,7 +206,7 @@ const myWishlist = asynchandler(async(req, res) => {
       $lookup: {
         from: 'favorites',
         localField: '_id',
-        foreignField: 'wishlistId',
+        foreignField: 'wishlist',
         as: 'favorites',
       },
     },
@@ -215,7 +215,7 @@ const myWishlist = asynchandler(async(req, res) => {
     {
       $lookup: {
         from: 'listings',
-        localField: 'favorites.listingId',
+        localField: 'favorites.listing',
         foreignField: '_id',
         as: 'listing',
       },

@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon index.js",
-    "lint": "eslint \"**/*.{js,ts,tsx,jsx}\"",
-    "lint:fix": "eslint \"**/*.{js,ts,tsx,jsx}\" --fix"
+    "start": "node index.js"
   },
   "description": "",
   "main": "index.js",
@@ -32,10 +31,5 @@
     "uuid": "^11.1.0",
     "winston": "^3.17.0",
     "winston-daily-rotate-file": "^5.0.0"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.33.0",
-    "eslint": "^9.33.0",
-    "globals": "^16.3.0"
   }
 }

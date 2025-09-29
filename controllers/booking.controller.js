@@ -335,14 +335,7 @@ const bookingHistory = asyncHandler(async(req, res) => {
 
   dayjs.extend(isSameOrAfter);
 
-  // const today = dayjs().startOf('day');
-
-  // const upcoming = bookings.filter((b) => dayjs(b.checkInDate).isSameOrAfter(today, 'day'));
-  // const previous = bookings.filter((b) => dayjs(b.checkInDate).isBefore(today, 'day'));
-
-
   const todayUtc = dayjs().utc().startOf('day').toDate();
-  console.log('todayUtc: ', todayUtc);
 
   // Upcoming = checkInDate >= today
   const upcoming = await Booking.find({ guestId: userId, checkInDate: { $gte: todayUtc } })
@@ -350,10 +343,6 @@ const bookingHistory = asyncHandler(async(req, res) => {
     .sort({ checkInDate: 1, createdAt: 1 })
     .lean();
 
-  // // previous = checkOutDate < today
-  // const previous = await Booking.find({ guestId: userId, checkOutDate: { $lt: todayUtc } })
-  //   .populate('listingId', 'title imageUrls')
-  //   .lean();
 
   const previous = await Booking.aggregate([
     {
@@ -396,7 +385,7 @@ const bookingHistory = asyncHandler(async(req, res) => {
 
     {
       $addFields: {
-        userRating: { $ifNull: [{ $arrayElemAt: ['$userFeedback.rating', 0] }, null] },
+        userRating: { $ifNull: [{ $arrayElemAt: ['$userFeedback.rating', 0] }, 'N/A'] },
       },
     },
 
