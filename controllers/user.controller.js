@@ -1,6 +1,6 @@
 import User from '../models/user.model.js';
 import { NotFoundError } from '../utils/error.js';
-import asynchandler from '../middlewares/asynchandler.js';
+import asynchandler from '../middlewares/asyncHandler.js';
 import { recentlyViewed } from './listing.controller.js';
 import Listing from '../models/listing.model.js';
 import Wishlist from '../models/wishlist.model.js';

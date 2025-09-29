@@ -1,4 +1,4 @@
-import asyncHandler from '../middlewares/asynchandler.js';
+import asyncHandler from '../middlewares/asyncHandler.js';
 import Wishlist from '../models/wishlist.model.js';
 import Favorite from '../models/favorite.model.js';
 import FeaturedArea from '../models/featured.model.js';

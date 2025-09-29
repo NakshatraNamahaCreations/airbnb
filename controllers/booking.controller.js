@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import asyncHandler from '../middlewares/asynchandler.js';
+import asyncHandler from '../middlewares/asyncHandler.js';
 import { apiLogger } from '../utils/logger.js';
 import { NotFoundError, ValidationError } from '../utils/error.js';
 import Booking from '../models/booking.model.js';

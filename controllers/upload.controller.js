@@ -1,5 +1,5 @@
 import { presignPut } from '../config/s3Client.js';
-import asyncHandler from '../middlewares/asynchandler.js';
+import asyncHandler from '../middlewares/asyncHandler.js';
 
 
 

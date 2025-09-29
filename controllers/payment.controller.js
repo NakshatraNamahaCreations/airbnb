@@ -1,4 +1,4 @@
-import asyncHandler from '../middlewares/asynchandler.js';
+import asyncHandler from '../middlewares/asyncHandler.js';
 import Payment from '../models/payment.model.js';
 
 const createPayment = asyncHandler(async(req, res) => {

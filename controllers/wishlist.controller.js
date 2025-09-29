@@ -1,4 +1,4 @@
-import asyncHandler from '../middlewares/asynchandler.js';
+import asyncHandler from '../middlewares/asyncHandler.js';
 import { AuthError, NotFoundError, ConflictError } from '../utils/error.js';
 import { apiLogger } from '../utils/logger.js';
 import Listing from '../models/listing.model.js';
