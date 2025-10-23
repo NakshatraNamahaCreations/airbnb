@@ -3,6 +3,7 @@ import Wishlist from '../models/wishlist.model.js';
 import Favorite from '../models/favorite.model.js';
 import FeaturedArea from '../models/featured.model.js';
 import Listing from '../models/listing.model.js';
+import { PLACEHOLDER_IMAGE } from '../config/stockImages.js';
 
 
 
@@ -162,7 +163,13 @@ const getFeatured = asyncHandler(async(req, res) => {
         {
           $addFields: {
             isFavorited: { $gt: [{ $size: '$favDocs' }, 0] },
-            imageUrl: { $arrayElemAt: ['$imageUrls', 0] },
+              imageUrl: {
+                $cond: {
+                  if: { $gt: [{ $size: '$imageUrls' }, 0] },
+                  then: { $arrayElemAt: ['$imageUrls', 0] },
+                  else: PLACEHOLDER_IMAGE
+                }
+              },
             avgRating: { $ifNull: [{ $arrayElemAt: ['$feedbackStats.avgRating', 0] }, 0] },
             // totalRatings: { $ifNull: [{ $arrayElemAt: ['$feedbackStats.totalRatings', 0] }, 0] },
             // totalReviews: { $ifNull: [{ $arrayElemAt: ['$feedbackStats.totalReviews', 0] }, 0] },

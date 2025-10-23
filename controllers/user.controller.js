@@ -5,6 +5,7 @@ import { recentlyViewed } from './listing.controller.js';
 import Listing from '../models/listing.model.js';
 import Wishlist from '../models/wishlist.model.js';
 import Favorite from '../models/favorite.model.js';
+import { PLACEHOLDER_IMAGE } from '../config/stockImages.js';
 
 
 
@@ -111,7 +112,7 @@ const myWishlist = asynchandler(async(req, res) => {
     .slice(0, 4)
     .map((item) => ({
       listingId: item.listing?._id,
-      imageUrl: item.listing?.imageUrls?.[0] || 'https://media.istockphoto.com/id/1530149386/vector/no-image-vector-symbol-missing-available-icon-no-gallery-for-this-moment-placeholder.jpg?s=2048x2048&w=is&k=20&c=aXXNBEft6bfUaXRECo-9ieD5FXYMPidK8vTokQmGJfw=',
+      imageUrl: item.listing?.imageUrls?.[0] || PLACEHOLDER_IMAGE,
       viewedAt: item.viewedAt,
     }));
 
@@ -250,7 +251,7 @@ const myWishlist = asynchandler(async(req, res) => {
         _id: 1,
         name: 1,
         imageUrl: {
-          $ifNull: ['$imageUrl', 'https://media.istockphoto.com/id/1147544807/vector/thumbnail-image-vector-graphic.jpg?s=2048x2048&w=is&k=20&c=dFWJz1EFJt7Tq2lA-hgTpSW119YywTWtS4EwU3fpKrE='],
+          $ifNull: ['$imageUrl', PLACEHOLDER_IMAGE],
         },
         favoritedAt: 1,
         createdAt: 1,

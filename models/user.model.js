@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 const userSchema = mongoose.Schema({
   phone: { type: String, unique: true, required: true },
   email: { type: String, unique: true },
+  password: { type: String },  // this is only added fr damin password login. u can remove it later if u want
   name: { type: String, required: false },
   dateOfBirth: { type: Date, required: false },
   // Role system
@@ -62,4 +63,4 @@ const userSchema = mongoose.Schema({
 
 const User = mongoose.model('User', userSchema);
 
-export  default User;
+export default User;
