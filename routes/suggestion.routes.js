@@ -4,7 +4,7 @@ import { createSuggested, createSuggestedBulk, getSuggested, getSuggestedById, u
 
 const router = express.Router();
 
-router.use(authenticate);
+// router.use(authenticate);
 // router.use(authorizeRoles('admin'));
 
 router.post('/bulk', createSuggestedBulk);

@@ -1,13 +1,3 @@
-// class CustomError extends Error {
-//   constructor(message, statusCode) {
-//     super(message);
-//     this.statusCode = statusCode;
-//     // this.status = `${statusCode}`.startsWith('4') ? 'fail' : 'error';
-//     this.status = getStatus(statusCode);
-//     Error.captureStackTrace(this, this.constructor);
-//   }
-// }
-
 class CustomError extends Error {
   constructor(message, statusCode, code = 'INTERNAL_ERROR', meta = undefined) {
     super(message);
@@ -18,21 +8,6 @@ class CustomError extends Error {
     Error.captureStackTrace(this, this.constructor);
   }
 }
-
-
-// More granular classification for status
-const getStatus = (statusCode) => {
-  if (statusCode >= 400 && statusCode < 500) {
-    if (statusCode === 418) {
-      return 'custom';  // Special case for teapot
-    }
-    return 'fail';
-  } else if (statusCode >= 500 && statusCode < 600) {
-    return 'error';
-  } else {
-    return 'unknown';  // For non-4xx, non-5xx status codes
-  }
-};
 
 class ConflictError extends CustomError {
   constructor(message = 'Conflict occurred') {
@@ -88,4 +63,3 @@ export {
   ServiceUnavailableError,
 };
 
-// export default CustomError;

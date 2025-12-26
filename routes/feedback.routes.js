@@ -1,7 +1,10 @@
 import express from 'express';
 import { addFeedback, getFeedbacks, getListingAverageRating, updateFeedback, deleteFeedback } from '../controllers/feedback.controller.js';
+import { authenticate } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
+
+router.use(authenticate)
 
 // POST /api/v1/ratings/:listingId → add/update rating
 router.post('/:listingId', addFeedback);

@@ -17,7 +17,7 @@ const createSuggested = async(req, res, next) => {
   try {
     const doc = await Suggestion.create(mapInputToDoc(req.body));
 
-    res.status(201).json({ message: 'Created', data: doc });
+    res.status(201).json({ message: 'Suggestion created successfully', data: doc });
   } catch (err) { next(err); }
 };
 

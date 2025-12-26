@@ -8,7 +8,18 @@ import morgan from 'morgan';
 import compression from 'compression';
 import { NotFoundError } from './utils/error.js';
 import { developmentRoute } from './routes/development.route.js';
-import registerRoutes from './routes/index.js';
+import authRoutes from './routes/auth.routes.js';
+import userRoutes from './routes/user.routes.js';
+import adminRoutes from './routes/admin.routes.js';
+import listingRoutes from './routes/listing.routes.js';
+import uploadRoutes from './routes/upload.routes.js';
+import wishlistRoutes from './routes/wishlist.routes.js';
+import bookingsRoutes from './routes/booking.routes.js';
+import featuredRoutes from './routes/featured.routes.js';
+import feedbackRoutes from './routes/feedback.routes.js';
+import suggestionRoutes from './routes/suggestion.routes.js';
+import kycRoutes from './routes/kyc.routes.js';
+import ipvRoutes from './routes/ipv.routes.js';
 
 const PORT = process.env.PORT || 9000;
 
@@ -49,7 +60,18 @@ app.use(cors({
 app.use(developmentRoute);
 
 // routes
-registerRoutes(app);
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/listings', listingRoutes);
+app.use('/api/v1/wishlists', wishlistRoutes);
+app.use('/api/v1/bookings', bookingsRoutes);
+app.use('/api/v1/uploads', uploadRoutes);
+app.use('/api/v1/featured-areas', featuredRoutes);
+app.use('/api/v1/suggested-destinations', suggestionRoutes);
+app.use('/api/v1/feedbacks', feedbackRoutes);
+app.use('/api/v1/identity-verifications', kycRoutes);
+app.use('/api/v1/ipv-verifications', ipvRoutes);
 
 app.get('/', (req, res) => {
   return res.status(200).json({ message: 'Hello from air-bnb clone v1' });
@@ -61,10 +83,6 @@ app.get('/health', (req, res) => {
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
   });
-});
-
-app.use((req, res) => {
-  throw new NotFoundError(`Cannot ${req.method} ${req.originalUrl}`);
 });
 
 app.use((err, req, res, next) => {

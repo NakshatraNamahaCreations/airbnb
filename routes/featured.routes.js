@@ -1,14 +1,14 @@
 import express from 'express';
-import { authenticate, authorizeRoles } from '../middlewares/authMiddleware.js';
+import { authenticate, authenticateAdmin, authorizeRoles } from '../middlewares/authMiddleware.js';
 import { createFeatured, getFeatured, getFeaturedById } from '../controllers/featured.controller.js';
 
 const router = express.Router();
 
-router.use(authenticate);
+// router.use(authenticate);
 // router.use(authorizeRoles('admin'));
 
 
-router.post('/', createFeatured);
+router.post('/', authenticateAdmin, createFeatured);
 router.get('/', getFeatured);
 router.get('/:id', getFeaturedById);
 // router.put('/:id', updateFeatured);

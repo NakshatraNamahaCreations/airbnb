@@ -15,7 +15,7 @@ import dayjs from 'dayjs';
 
 
 const registerListing = asyncHandler(async(req, res) => {
-  const { userId } = req;
+  const { adminId } = req;
   const {
     title,
     description,
@@ -55,7 +55,7 @@ const registerListing = asyncHandler(async(req, res) => {
   });
 
   const newListing = new Listing({
-    hostId: userId,
+    hostId: adminId,
     title,
     description,
     imageUrls,

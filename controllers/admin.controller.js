@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import User from '../models/user.model.js';
-import { generateToken } from '../utils/createToken.js';
+import { generateAdminToken, generateToken } from '../utils/createToken.js';
+import Admin from '../models/admin.model.js';
 
 
 
@@ -23,21 +24,19 @@ const adminSignup = async (req, res) => {
   try {
     const { email, password } = req.body || {};
 
-    const phone = 9999999999
-
     if (!email || !password) {
       return res.status(422).json({ message: 'email and password required' });
     }
 
-    const existing = await User.findOne({ email }).lean();
+    const existing = await Admin.findOne({ email }).lean();
     if (existing) {
-      return res.status(409).json({ message: 'admin already exists' });
+      return res.status(400).json({ message: 'admin already exists' });
     }
 
     const passwordHash = await bcrypt.hash(String(password), 10);
-    const admin = await User.create({ email, password: passwordHash, phone, roles: ['admin', 'host', 'guest'] });
+    const admin = await Admin.create({ email, password: passwordHash });
 
-    const token = generateToken(admin._id, ['admin'], admin.email);
+    const token = generateAdminToken(res, admin._id, admin.email);
 
     return res.status(201).json({ message: 'admin created', data: { token, admin } });
   } catch (err) {
@@ -49,14 +48,14 @@ const adminSignup = async (req, res) => {
 const adminLogin = async (req, res) => {
   try {
     const { email, password } = req.body || {};
-    console.log(`email: `, email, `password: `, password);
+  
 
     if (!email || !password) {
       return res.status(422).json({ message: 'email and password required' });
     }
 
-    const admin = await User.findOne({ email });
-    console.log(`admin: `, admin);
+    const admin = await Admin.findOne({ email });
+   
 
     if (!admin) {
       return res.status(401).json({ message: 'invalid credentials' });
@@ -68,7 +67,7 @@ const adminLogin = async (req, res) => {
       return res.status(401).json({ message: 'invalid credentials' });
     }
 
-    const token = generateToken(admin._id, ['admin'], admin.email);
+    const token = generateAdminToken(res, admin._id, admin.email);
 
     return res.status(200).json({ message: 'login successful', data: { token, admin } });
   } catch (err) {
@@ -79,7 +78,7 @@ const adminLogin = async (req, res) => {
 // Get current admin profile (requires admin auth middleware to set req.adminId)
 const getMe = async (req, res) => {
   try {
-    const admin = await User.findById(req.userId).select('-password').lean();
+    const admin = await Admin.findById(req.userId).select('-password').lean();
     if (!admin) {
       return res.status(404).json({ message: 'admin not found' });
     }
@@ -100,7 +99,7 @@ const updateMe = async (req, res) => {
       updates.password = await bcrypt.hash(String(password), 10);
     }
 
-    const admin = await User.findByIdAndUpdate(
+    const admin = await Admin.findByIdAndUpdate(
       req.adminId,
       { $set: updates },
       { new: true }

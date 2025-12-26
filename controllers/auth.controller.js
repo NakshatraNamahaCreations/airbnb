@@ -89,6 +89,7 @@ const verifyOtp = async(req, res) => {
     }
 
     const sess = await OtpSession.findOne({ sessionId, phone }).lean();
+   
     if (!sess) return res.status(400).json({ ok: false, message: 'invalid_session' });
 
     if (sess.status !== 'pending') {
@@ -119,6 +120,7 @@ const verifyOtp = async(req, res) => {
     );
 
     const existing = await User.findOne({ phone }).lean();
+  
     if (existing) {
       const userPreview = {
         id: existing._id,
@@ -138,6 +140,7 @@ const verifyOtp = async(req, res) => {
       isNew: true,
       required: ['name', 'dateOfBirth', 'email'],
       phone,
+      user:existing
     });
   } catch (err) {
     console.error('verifyOtp error:', err);
@@ -218,50 +221,6 @@ const registerUser = async(req, res) => {
 
 
 
-
-
-
-
-
-// // Create a new user with location
-// const createUser = async(req, res) => {
-//   const { name, email, latitude, longitude } = req.body;
-
-//   try {
-//     // Create a new User document with GeoJSON location data
-//     const userLocation = new Location({
-//       location: {
-//         type: 'Point',
-//         coordinates: [longitude, latitude], // [longitude, latitude]
-//       },
-//     });
-
-//     await userLocation.save(); // Save the location first
-
-//     const newUser = new User({
-//       name,
-//       email,
-//       location: userLocation._id, // Store the location reference in the user document
-//     });
-
-//     await newUser.save();
-//     res.status(201).json({ message: 'User created successfully', user: newUser });
-//   } catch (err) {
-//     res.status(500).json({ error: 'Error creating user', details: err.message });
-//   }
-// };
-
-// // Get a user's profile
-// const getUserProfile = async(req, res) => {
-//   try {
-//     const user = await User.findById(req.params.id).populate('location'); // Populate location data
-//     if (!user) return res.status(404).json({ message: 'User not found' });
-
-//     res.status(200).json(user);
-//   } catch (err) {
-//     res.status(500).json({ error: 'Error retrieving user profile', details: err.message });
-//   }
-// };
 
 
 export { startOtp, verifyOtp, registerUser };

@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import { AMENITIES, STATES } from '../constants/enums.js';
 
 const listingSchema = new mongoose.Schema({
-  hostId: { type: mongoose.Types.ObjectId, ref: 'User', required: true },
+  hostId: { type: mongoose.Types.ObjectId, ref: 'Admin', required: true },
   title: { type: String, required: true },
   description: { type: String },
 
