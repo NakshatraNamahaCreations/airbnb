@@ -95,7 +95,7 @@ const getDigiLockerUrl = async (req, res) => {
 * 
 */
 const initiateKyc = async (req, res) => {
-  const { userId } = req.query;
+  const { userId } = req;
   try {
 
     // 🔍 1️⃣ Find the user
@@ -200,7 +200,7 @@ const meonCallback = async (req, res) => {
 
 
   const { client_token, state ,userId} = req.query
-  console.log("meoncallback: ", { client_token, state })
+ 
 
   if (!client_token || !state) {
     console.log("Missing clientToken or state in callback: ", )

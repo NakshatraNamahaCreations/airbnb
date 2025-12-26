@@ -47,6 +47,7 @@ app.use(
         "http://localhost:5173",
         "http://127.0.0.1:5500",
         "http://192.168.0.157:9000",
+        "https://api.stayfinderindia.net"
       ];
 
       if (process.env.FRONTEND_URLS) {

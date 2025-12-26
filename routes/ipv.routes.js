@@ -4,8 +4,11 @@ import {
   exportCapturedData,
 
 } from "../controllers/ipv.controller.js";
+import { authenticate } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
+
+router.use(authenticate);
 
 // initiate IPV
 router.post("/generate-face-token", initiateKycForFaceToken);

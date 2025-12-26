@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.post('/', authenticateAdmin, registerListing);
 
-// router.use(authenticate); 
+router.use(authenticate); 
 // router.post('/', registerListing);
 router.get('/', getAllListings);
 router.get('/me', getMyListings);

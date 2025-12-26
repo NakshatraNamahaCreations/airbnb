@@ -232,7 +232,7 @@ const getListing = asyncHandler(async(req, res) => {
   const { userId } = req;
   const { id } = req.params;
   const { checkInDate, checkOutDate } = req.query;
-
+console.log("userId",userId)
 
   if (!mongoose.Types.ObjectId.isValid(id)) {
     throw new NotFoundError('Invalid ID');

@@ -64,7 +64,7 @@ export const initiateKycForFaceToken = async (req, res) => {
   try {
     const clientId = process.env.MEON_IPV_CLIENT_ID;
     const clientSecret = process.env.MEON_IPV_CLIENT_SECRET;
-    const userId = req.body.userId;
+    const { userId } = req;
 
     if (!clientId || !clientSecret) {
       return res
@@ -78,8 +78,9 @@ export const initiateKycForFaceToken = async (req, res) => {
         .status(404)
         .json({ success: false, message: "User not found" });
     }
+    
 
-if (user.face == true) {
+    if (user.face == true) {
       return res
         .status(400)
         .json({ success: false, message: "User already verified" });
@@ -230,12 +231,10 @@ export const webhookapi = async (req, res) => {
 
     const exportToken = exportTokenRes?.data?.data?.token;
     if (!exportToken) {
-      return res
-        .status(400)
-        .json({
-          message: "Failed to get export token",
-          raw: exportTokenRes?.data,
-        });
+      return res.status(400).json({
+        message: "Failed to get export token",
+        raw: exportTokenRes?.data,
+      });
     }
 
     // 2) export captured data
@@ -249,7 +248,7 @@ export const webhookapi = async (req, res) => {
     const result = exportRes.data?.data;
     user.face = result.faces_matched || false;
     user.faceUrl = result.image || ""; // store captured image
-    user.faceMatchPercent = result.face_match_percentage || 0; 
+    user.faceMatchPercent = result.face_match_percentage || 0;
 
     await user.save();
 
@@ -271,14 +270,12 @@ export const webhookapi = async (req, res) => {
   }
 };
 
-
 export const exportCapturedData = async (req, res) => {
   try {
-
     const clientId = process.env.MEON_IPV_CLIENT_ID;
     const clientSecret = process.env.MEON_IPV_CLIENT_SECRET;
     const transactionId = req.body.transaction_id;
-    const userId = req.body.userId;
+    const { userId } = req;
 
     const user = await User.findById(userId);
 
@@ -304,12 +301,10 @@ export const exportCapturedData = async (req, res) => {
 
     const exportToken = exportTokenRes?.data?.data?.token;
     if (!exportToken) {
-      return res
-        .status(400)
-        .json({
-          message: "Failed to get export token",
-          raw: exportTokenRes?.data,
-        });
+      return res.status(400).json({
+        message: "Failed to get export token",
+        raw: exportTokenRes?.data,
+      });
     }
 
     // 2) export captured data
@@ -323,11 +318,9 @@ export const exportCapturedData = async (req, res) => {
     const result = exportRes.data?.data;
     user.face = result.faces_matched || false;
     user.faceUrl = result.image || ""; // store captured image
-    user.faceMatchPercent = result.face_match_percentage || 0; 
+    user.faceMatchPercent = result.face_match_percentage || 0;
 
     await user.save();
-
-
 
     return res.status(200).json({
       message: "Export success",

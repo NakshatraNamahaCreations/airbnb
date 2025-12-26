@@ -4,7 +4,7 @@ import { generateKycToken, meonCallback, retrieveAadhaar, faceMatch, getDigiLock
 
 const router = express.Router();
 
-// router.use(authenticate);
+router.use(authenticate);
 
 
 router.get('/generate-token', generateKycToken);
