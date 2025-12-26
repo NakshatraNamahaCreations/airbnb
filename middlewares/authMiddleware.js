@@ -21,7 +21,7 @@ const authenticate = asyncHandler(async (req, res, next) => {
 
   if (token) {
     try {
-      console.log("process.env.JWT_SECRET", process.env.JWT_SECRET);
+     
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
       const user = await User.findById(decoded.userId);

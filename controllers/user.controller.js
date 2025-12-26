@@ -292,9 +292,9 @@ const updateMe = asynchandler(async(req, res) => {
   const pick = (obj, keys) => keys.reduce((a, k) => (obj[k] !== undefined ? (a[k] = obj[k], a) : a), {});
 
   const raw = pick(req.body, allowed);
-  console.log('raw: ', raw);
+  
   const $set = normalizeData(raw);
-  console.log('$set: ', $set);
+
 
   if (Object.keys($set).length === 0) {
     return res.status(200).json({ message: 'no_changes' });
