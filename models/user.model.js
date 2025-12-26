@@ -70,11 +70,7 @@ const userSchema = mongoose.Schema(
       enum: ["guest", "host", "admin"],
       default: "guest",
     },
-    // listings: [{ type: mongoose.Types.ObjectId, ref: 'Listing' }],
-    // collections: [{
-    //   type: mongoose.Schema.Types.ObjectId,
-    //   ref: 'Listing',    // Assuming "Listing" is another model representing saved listings
-    // }],
+    
     profile: {
       age: { type: Number },
       gender: { type: String },
@@ -89,11 +85,9 @@ const userSchema = mongoose.Schema(
       },
     ],
 
-    // Host-specific fields
+
     hostProfile: {
-      // isHost: { type: Boolean, default: false },   //redundant maybe cz we already ve roles[]
-      // listings: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Listing' }],
-      // other host-specific info like payout details
+     
       payoutDetails: {
         bankName: String,
         accountNumber: String,
