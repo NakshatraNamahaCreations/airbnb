@@ -78,7 +78,6 @@ export const initiateKycForFaceToken = async (req, res) => {
         .status(404)
         .json({ success: false, message: "User not found" });
     }
-    
 
     if (user.face == true) {
       return res
@@ -125,7 +124,7 @@ export const initiateKycForFaceToken = async (req, res) => {
       });
     }
 
-    const redirectUrl1 = `http://192.168.1.76:9000/api/v1/ipv-verifications/export-ipv?userId=${userId}`;
+    const redirectUrl1 = `${process.env.MEON_FACE_REDIRECT_URL}?userId=${userId}`;
 
     const payload = {
       check_location: false,
@@ -135,7 +134,7 @@ export const initiateKycForFaceToken = async (req, res) => {
       text_script: false,
       video_time: false,
       image_to_be_match: imageToSend,
-      redirectUrl: redirectUrl1,
+      redirect_url: redirectUrl1,
     };
 
     // 2) initiate request (match_face must be true)
@@ -199,26 +198,35 @@ export const initiateKycForFaceToken = async (req, res) => {
 
 export const webhookapi = async (req, res) => {
   try {
-    console.log(req.body, req.query);
-    // const { success,userId, state } = req.query;
-    // console.log("userId",userId)
-    //  const transactionId = state;
     const clientId = process.env.MEON_IPV_CLIENT_ID;
     const clientSecret = process.env.MEON_IPV_CLIENT_SECRET;
-    const transactionId = req.body.transaction_id;
 
-    const user = await User.findById(userId);
+    const { state: transactionId } = req.query;
+    console.log("transactionId", transactionId);
 
-    if (!clientId || !clientSecret) {
-      return res
-        .status(400)
-        .json({ message: "Missing MEON client credentials in env" });
+    let { userId } = req.query;
+
+    // strip anything after ?
+    if (userId?.includes("?")) {
+      userId = userId.split("?")[0];
     }
+
+    console.log("userId", userId);
+    if (!clientId || !clientSecret) {
+      return res.status(400).json({
+        message: "Missing MEON client credentials in env",
+      });
+    }
+
     if (!transactionId) {
       return res.status(400).json({ message: "transaction_id is required" });
     }
 
-    // 1) export token using transaction_id
+    if (!userId) {
+      return res.status(400).json({ message: "userId is required" });
+    }
+
+    // 1) token
     const exportTokenRes = await axios.post(
       `${MEON_BASE}/backend/generate_token_for_ipv_credentials`,
       {
@@ -226,7 +234,7 @@ export const webhookapi = async (req, res) => {
         client_secret: clientSecret,
         transaction_id: transactionId,
       },
-      { headers: { "Content-Type": "application/json" }, timeout: 60000 }
+      { timeout: 60000 }
     );
 
     const exportToken = exportTokenRes?.data?.data?.token;
@@ -237,32 +245,40 @@ export const webhookapi = async (req, res) => {
       });
     }
 
-    // 2) export captured data
+    // 2) export data
     const exportRes = await axios.get(`${MEON_BASE}/backend/export_data`, {
-      headers: {
-        token: exportToken,
-        "Content-Type": "application/json",
-      },
+      headers: { token: exportToken },
       timeout: 60000,
     });
-    const result = exportRes.data?.data;
-    user.face = result.faces_matched || false;
-    user.faceUrl = result.image || ""; // store captured image
-    user.faceMatchPercent = result.face_match_percentage || 0;
 
-    await user.save();
+    const result = exportRes?.data?.data || {};
 
-    console.log("exportRes.data:", exportRes.data);
+    // 3) update user
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          face: !!result.faces_matched,
+          faceUrl: result.image || "",
+          faceMatchPercent: Number(result.face_match_percentage || 0),
+        },
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
 
     return res.status(200).json({
       message: "Export success",
       data: exportRes.data,
     });
   } catch (error) {
-    console.error(
-      "exportCapturedData error:",
-      error?.response?.data || error?.message || error
-    );
+    console.error("webhook error:", error?.response?.data || error);
     return res.status(400).json({
       message: "Failed to export captured data",
       error: error?.response?.data || error?.message,

@@ -7,7 +7,7 @@ const generateToken = (userId, userRoles, email) => {
     userRoles,  // Include user role for authorization in other services
     email,     // Optional, can be helpful in logs or dashboards
   }, process.env.JWT_SECRET, {
-    expiresIn: '1d',
+    expiresIn: '30d',
   });
 
 

@@ -2,11 +2,15 @@ import express from "express";
 import {
   initiateKycForFaceToken,
   exportCapturedData,
+  webhookapi
 
 } from "../controllers/ipv.controller.js";
 import { authenticate } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
+
+
+router.get("/webhook-ipv", webhookapi);
 
 router.use(authenticate);
 

@@ -4,6 +4,8 @@ import { generateKycToken, meonCallback, retrieveAadhaar, faceMatch, getDigiLock
 
 const router = express.Router();
 
+
+router.get('/callback', meonCallback);
 router.use(authenticate);
 
 
@@ -14,7 +16,7 @@ router.post('/face-match', faceMatch);
 
 // aadhar verify
 router.get('/generate-aadhar-url', initiateKyc);
-router.get('/callback', meonCallback);
+
 
 // router.get("/generate-face-token", generateFaceToken);
 
