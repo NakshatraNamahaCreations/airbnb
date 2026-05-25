@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import OtpSession from '../models/otpSession.model.js';
 import User from '../models/user.model.js';
 import { generateToken } from '../utils/createToken.js';
+import { sendOtpSms } from '../utils/sendOtpSms.js';
 
 const OTP_LEN = 6;
 const OTP_TTL_MIN = 10;       // dev TTL
@@ -54,8 +55,12 @@ const startOtp = async(req, res) => {
       attempts: 0,
       expiresAt: minutesFromNow(OTP_TTL_MIN),
     });
+    
+      await sendOtpSms(phone, otp);
 
-    const payload = { sessionId, otp, expiresInMinutes: OTP_TTL_MIN };
+    const payload = { sessionId, expiresInMinutes: OTP_TTL_MIN };
+
+    
 
     return res.status(200).json({ data: payload });
   } catch (err) {
