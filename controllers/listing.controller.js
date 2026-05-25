@@ -9,6 +9,7 @@ import Booking from '../models/booking.model.js';
 import Favorite from '../models/favorite.model.js';
 import Feedback from '../models/feedback.model.js';
 import dayjs from 'dayjs';
+import { parsePagination, buildPaginationMeta } from '../utils/pagination.js';
 
 
 
@@ -17,6 +18,7 @@ import dayjs from 'dayjs';
 const registerListing = asyncHandler(async(req, res) => {
   const { adminId } = req;
   const {
+    hostId,
     title,
     description,
     imageUrls = [],
@@ -33,29 +35,23 @@ const registerListing = asyncHandler(async(req, res) => {
     location = {},
     houseRules = [],
     safetyAndProperty = [],
+    status = 'active',
   } = req.body;
 
-  console.log({
-    title,
-    description,
-    imageUrls,
-    address,
-    city,
-    state,
-    pincode,
-    pricePerNight,
-    currency,
-    bedrooms,
-    maxGuests,
-    capacity,
-    amenities,
-    location,
-    houseRules,
-    safetyAndProperty,
-  });
+  if (!hostId || !mongoose.Types.ObjectId.isValid(hostId)) {
+    return res.status(422).json({ message: 'hostId (User _id) is required' });
+  }
+
+  const host = await User.findById(hostId).select('roles status').lean();
+  if (!host) return res.status(404).json({ message: 'host user not found' });
+  if (host.status !== 'active') return res.status(400).json({ message: 'host user is not active' });
+  if (!host.roles?.includes('host')) {
+    return res.status(400).json({ message: 'user is not a host. Upgrade via /admin/users/:id/upgrade-to-host first.' });
+  }
 
   const newListing = new Listing({
-    hostId: adminId,
+    hostId,
+    createdByAdminId: adminId,
     title,
     description,
     imageUrls,
@@ -68,11 +64,11 @@ const registerListing = asyncHandler(async(req, res) => {
     bedrooms,
     maxGuests,
     capacity,
-    rating: (Math.random() * 5).toFixed(1),
     amenities,
     location,
     houseRules,
     safetyAndProperty,
+    status,
   });
 
   await newListing.save();
@@ -97,18 +93,25 @@ const getMyListings = asyncHandler(async(req, res) => {
 });
 
 const getAllListings = asyncHandler(async(req, res) => {
-  const { userId } = req;
+  const { page, limit, skip, sort, q } = parsePagination(req.query);
+  const filter = {};
+  if (q) filter.$or = [
+    { title:   { $regex: q, $options: 'i' } },
+    { city:    { $regex: q, $options: 'i' } },
+    { address: { $regex: q, $options: 'i' } },
+  ];
+  if (req.query.status) filter.status = req.query.status;
 
-  const listings = await Listing.find().lean();
+  const [listings, total] = await Promise.all([
+    Listing.find(filter).sort(sort).skip(skip).limit(limit).lean(),
+    Listing.countDocuments(filter),
+  ]);
 
   res.status(200).json({
     message: 'host listings',
-    data: {
-      count: listings.length,
-      listings,
-    },
+    data: { count: listings.length, listings },
+    pagination: buildPaginationMeta(total, page, limit),
   });
-
 });
 
 // if (searchQuery && searchQuery.trim() !== '') {

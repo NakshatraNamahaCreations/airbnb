@@ -61,7 +61,7 @@ const MeonKycSchema = new mongoose.Schema(
 const userSchema = mongoose.Schema(
   {
     phone: { type: String, unique: true, required: true },
-    email: { type: String, unique: true },
+    email: { type: String, unique: true, sparse: true },
     name: { type: String, required: false },
     dateOfBirth: { type: Date, required: false },
     // Role system
@@ -70,6 +70,14 @@ const userSchema = mongoose.Schema(
       enum: ["guest", "host", "admin"],
       default: "guest",
     },
+    status: {
+      type: String,
+      enum: ["active", "suspended", "deleted"],
+      default: "active",
+      index: true,
+    },
+    suspendedAt: { type: Date },
+    suspensionReason: { type: String },
     
     profile: {
       age: { type: Number },

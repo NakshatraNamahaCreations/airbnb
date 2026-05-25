@@ -10,6 +10,7 @@ import dayjs from 'dayjs';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter.js';   // <-- import it
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore.js'; // optional
 import utc from 'dayjs/plugin/utc.js';
+import { parsePagination, buildPaginationMeta } from '../utils/pagination.js';
 dayjs.extend(utc);
 
 
@@ -109,38 +110,28 @@ const createBooking = async(req, res) => {
 };
 
 const getAllBookings = asyncHandler(async(req, res) => {
-  console.log('getAll bookings ');
-  const { status, assignedTo, startDate, endDate } = req.query;
+  const { userId } = req;
+  const { status, startDate, endDate } = req.query;
+  const { page, limit, skip, sort } = parsePagination(req.query, { sort: '-updatedAt' });
 
-  // Build dynamic filter object
-  const filter = {};
+  // Scope to current user — admin uses /admin/bookings instead.
+  const filter = { guestId: userId };
   if (status) filter.status = status;
-  if (assignedTo) filter.assignedTo = assignedTo;
   if (startDate || endDate) {
     filter.createdAt = {};
     if (startDate) filter.createdAt.$gte = new Date(startDate);
     if (endDate) filter.createdAt.$lte = new Date(endDate);
   }
 
-  const bookings = await Booking.find(filter).sort({ updatedAt: -1 }).lean();
-
-  console.log('bookigs ', bookings);
-
-  // bookings.map((booking) => {
-  //   booking.checkInDate = dayjs(booking.checkInDate).format('YYYY-MM-DD');
-  //   booking.checkOutDate = dayjs(booking.checkOutDate).format('YYYY-MM-DD');
-  // });
-
-  // const formattedBookings = bookings.map((booking) => ({
-  //   checkInDate: booking.checkInDate,
-  //   checkOutDate: booking.checkOutDate,
-  // }));
-
-  // console.log('after formatted bookigs: ', formattedBookings);
+  const [bookings, total] = await Promise.all([
+    Booking.find(filter).sort(sort).skip(skip).limit(limit).lean(),
+    Booking.countDocuments(filter),
+  ]);
 
   res.status(200).json({
     message: 'Bookings fetched successfully',
     data: bookings,
+    pagination: buildPaginationMeta(total, page, limit),
   });
 });
 

@@ -125,27 +125,28 @@ const verifyOtp = async(req, res) => {
     );
 
     const existing = await User.findOne({ phone }).lean();
-  
+
     if (existing) {
-      const userPreview = {
+      const user = {
         id: existing._id,
         name: existing.name || '',
         email: existing.email || '',
         dateOfBirth: existing.dateOfBirth || '',
         phone: existing.phone,
+        roles: existing.roles || [],
       };
 
-
-      const token = generateToken(existing._id, existing.roles, existing.phone, existing.email);
-      return res.status(200).json({ data: { token, isNew: false, userPreview } });
+      const token = generateToken(existing._id, existing.roles, existing.email);
+      return res.status(200).json({ data: { token, isNew: false, user } });
     }
 
     // no user -> mobile should show form for name, dateOfBirth, email
     return res.status(200).json({
-      isNew: true,
-      required: ['name', 'dateOfBirth', 'email'],
-      phone,
-      user:existing
+      data: {
+        isNew: true,
+        required: ['name', 'dateOfBirth', 'email'],
+        phone,
+      },
     });
   } catch (err) {
     console.error('verifyOtp error:', err);
@@ -190,15 +191,25 @@ const registerUser = async(req, res) => {
     if (existing) {
       // consume session anyway to avoid reuse
       await OtpSession.updateOne({ _id: sess._id }, { $set: { status: 'consumed' } });
+      const token = generateToken(existing._id, existing.roles, existing.email);
       return res.status(200).json({
         data: {
+          token,
+          isNew: false,
           alreadyExists: true,
-          user: { id: existing._id, name: existing.name, email: existing.email, dateOfBirth: existing.dateOfBirth, phone: existing.phone },
+          user: {
+            id: existing._id,
+            name: existing.name || '',
+            email: existing.email || '',
+            dateOfBirth: existing.dateOfBirth || '',
+            phone: existing.phone,
+            roles: existing.roles || [],
+          },
         },
       });
     }
 
-    const user = await User.create({
+    const created = await User.create({
       phone,
       name,
       email,
@@ -210,11 +221,19 @@ const registerUser = async(req, res) => {
     // mark session consumed
     await OtpSession.updateOne({ _id: sess._id }, { $set: { status: 'consumed' } });
 
-    // You can mint JWT here if needed; returning user for now
+    const token = generateToken(created._id, created.roles, created.email);
     return res.status(201).json({
       data: {
-        isCreated: true,
-        user: { id: user._id, name: user.name, email: user.email, dateOfBirth: user.dateOfBirth, phone: user.phone, roles: user.roles },
+        token,
+        isNew: true,
+        user: {
+          id: created._id,
+          name: created.name,
+          email: created.email,
+          dateOfBirth: created.dateOfBirth,
+          phone: created.phone,
+          roles: created.roles,
+        },
       },
     });
   } catch (err) {

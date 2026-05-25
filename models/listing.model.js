@@ -1,8 +1,11 @@
 import mongoose from 'mongoose';
 import { AMENITIES, STATES } from '../constants/enums.js';
 
+const LISTING_STATUS = ['active', 'paused', 'draft', 'pending_review', 'approved', 'rejected'];
+
 const listingSchema = new mongoose.Schema({
-  hostId: { type: mongoose.Types.ObjectId, ref: 'Admin', required: true },
+  hostId: { type: mongoose.Types.ObjectId, ref: 'User', required: true },
+  createdByAdminId: { type: mongoose.Types.ObjectId, ref: 'Admin' },
   title: { type: String, required: true },
   description: { type: String },
 
@@ -33,15 +36,13 @@ const listingSchema = new mongoose.Schema({
     pets: { type: Number, required: true, min: 0 },
   },
 
-  // rating: { type: Number },
-
   houseRules: { type: [String], default: [] },
   safetyAndProperty: { type: [String], default: [] },
 
-  status: { type: String, enum: ['active', 'paused', 'draft'], default: 'active' },
-  // isVerified: { type: Boolean, default: false },
-  // verificationStatus: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
-  // verificationReason: { type: String },
+  status: { type: String, enum: LISTING_STATUS, default: 'active', index: true },
+  rejectionReason: { type: String },
+  approvedAt: { type: Date },
+  approvedByAdminId: { type: mongoose.Types.ObjectId, ref: 'Admin' },
 }, { timestamps: true });
 
 listingSchema.index({ location: '2dsphere' });
@@ -55,4 +56,5 @@ listingSchema.pre('validate', function(next) {
 });
 
 const Listing = mongoose.model('Listing', listingSchema);
+export { LISTING_STATUS };
 export default Listing;
