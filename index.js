@@ -1,5 +1,5 @@
+import "dotenv/config"; // MUST be the very first import so env vars are available before any module reads process.env at load time (e.g. config/s3Client.js)
 import express from "express";
-import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import { connectDB } from "./config/db.js";
 import cors from "cors";
@@ -19,8 +19,6 @@ import feedbackRoutes from "./routes/feedback.routes.js";
 import suggestionRoutes from "./routes/suggestion.routes.js";
 import kycRoutes from "./routes/kyc.routes.js";
 import ipvRoutes from "./routes/ipv.routes.js";
-
-dotenv.config();
 
 const PORT = process.env.PORT || 9000;
 
@@ -47,18 +45,25 @@ app.use(
         "http://localhost:5173",
         "http://127.0.0.1:5500",
         "http://192.168.0.157:9000",
-        "https://api.stayfinderindia.net"
+        "https://api.stayfinderindia.net",
+        "https://api.stayfinder.com",
+        "https://api.stayfinder.in",
       ];
 
       if (process.env.FRONTEND_URLS) {
         const envOrigins = process.env.FRONTEND_URLS.split(",").map((url) =>
-          url.trim()
+          url.trim(),
         );
-
         allowedOrigins.push(...envOrigins);
       }
 
-      if (!origin || allowedOrigins.includes(origin)) {
+      // In dev, allow any localhost / 127.0.0.1 origin (any port).
+      const isDevLocalhost =
+        process.env.NODE_ENV !== "production" &&
+        origin &&
+        /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+
+      if (!origin || allowedOrigins.includes(origin) || isDevLocalhost) {
         callback(null, true);
       } else {
         console.log(`origin blocked: ${origin}`);
@@ -66,9 +71,9 @@ app.use(
       }
     },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-  })
+  }),
 );
 
 // routes
@@ -117,8 +122,7 @@ app.use((err, req, res, next) => {
   res.status(err.statusCode).json({
     code: err.code,
     message: err.message,
-    stack:
-      process.env.NODE_ENV === "development" ? err.stack : undefined,
+    stack: process.env.NODE_ENV === "development" ? err.stack : undefined,
   });
 });
 

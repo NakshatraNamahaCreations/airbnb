@@ -187,15 +187,39 @@ Allowed `status` values: `active`, `suspended`, `deleted`. Setting `status: susp
 **Auth:** super_admin/admin. Soft delete — sets `status: deleted`. **Body:** —
 **Response 200:** `{ "message": "user deleted (soft)", "data": <user> }`. Audit: `user.delete`.
 
-### 4.7 POST `/admin/users/:id/upgrade-to-host`
+### 4.7 POST `/admin/hosts`
+**Auth:** super_admin/admin. Creates a brand-new User with `roles: ['guest','host']` directly (no OTP, no user self-signup). The host does not log in themselves — admin manages everything on their behalf.
+**Body:**
+```json
+{
+  "phone": "9876543210",
+  "name": "Ramesh K",
+  "email": "ramesh@example.com",
+  "dateOfBirth": "1985-04-12"
+}
+```
+All four fields required. Phone is normalised (non-digits stripped, leading `91` removed, must match `^[6-9]\d{9}$`). Email lower-cased and pattern-validated. `dateOfBirth` must parse to a valid Date.
+**Response 201:** `{ "message": "host created", "data": <user with roles ['guest','host']> }`. Audit: `host.create`.
+**Errors:**
+- `422` missing or invalid field.
+- `409` phone or email already exists — response includes `{ data: { existingUserId } }`. Use `/admin/users/:id/upgrade-to-host` on the existing user instead.
+
+### 4.8 PATCH `/admin/hosts/:id`
+**Auth:** super_admin/admin. Edit an existing host's profile. Fails with `400` if the target user is not a host (use `PATCH /admin/users/:id` for non-hosts).
+**Body (any subset):** `{ "name", "email", "phone", "dateOfBirth" }`
+Same normalisation/validation rules as `POST /admin/hosts`. `phone` and `email` are checked for uniqueness against other users.
+**Response 200:** `{ "message": "host updated", "data": <user> }`. Audit: `host.update`.
+**Errors:** `400` not a host, `404` host not found, `409` phone/email already used, `422` invalid field.
+
+### 4.9 POST `/admin/users/:id/upgrade-to-host`
 **Auth:** super_admin/admin. Adds `host` to `roles`. **Body:** —
 **Response 200:** `{ "message": "user became host successfully", "data": <user> }`. Audit: `user.upgrade_to_host`.
 
-### 4.8 POST `/admin/users/:id/downgrade-from-host`
+### 4.10 POST `/admin/users/:id/downgrade-from-host`
 **Auth:** super_admin/admin. Removes `host` from `roles`. **Body:** —
 **Response 200:** `{ "message": "host role removed", "data": <user> }`. Audit: `user.downgrade_from_host`.
 
-### 4.9 GET `/admin/users/:id/bookings`
+### 4.11 GET `/admin/users/:id/bookings`
 **Auth:** admin.
 **Query:** `?page&limit&sort&status=`
 **Response 200:**
@@ -251,8 +275,9 @@ Allowed `status` values: `active`, `suspended`, `deleted`. Setting `status: susp
   "pricePerNight": 2500,
   "currency": "INR",
   "bedrooms": 1,
-  "maxGuests": 2,
-  "capacity": { "adults": 2, "children": 0, "infants": 0, "pets": 0 },
+  "maxGuests": 4,
+  "maxInfants": 1,
+  "maxPets": 0,
   "amenities": ["WiFi","Kitchen"],
   "location": { "type":"Point", "coordinates": [77.5946, 12.9716] },
   "houseRules": [],
@@ -260,12 +285,17 @@ Allowed `status` values: `active`, `suspended`, `deleted`. Setting `status: susp
   "status": "active"
 }
 ```
+**Capacity model (changed):** there are no per-category caps anymore. Use:
+- `maxGuests` (required, min 1) — shared cap on `adults + children`.
+- `maxInfants` (default 0) — infants don't count toward `maxGuests`.
+- `maxPets` (default 0) — pets don't count toward `maxGuests`; `0` = not allowed.
+
 `createdByAdminId` is set automatically from the admin token.
 **Response 201:** `{ "message": "Listing created successfully", "listing": <doc> }`.
-**Errors:** `422` missing/invalid `hostId`, `400` host user is not active or lacks `host` role, `404` host user not found.
+**Errors:** `422` missing/invalid `hostId` or `maxGuests < 1`, `400` host user is not active or lacks `host` role, `404` host user not found.
 
 ### 5.4 PATCH `/listings/:id` (existing, admin)
-Same as before — see [controllers/listing.controller.js](controllers/listing.controller.js) for allowed fields.
+Allowed fields: `title`, `description`, `imageUrls`, `address`, `city`, `state`, `pincode`, `amenities`, `location`, `pricePerNight`, `currency`, `bedrooms`, `maxGuests`, `maxInfants`, `maxPets`, `houseRules`, `safetyAndProperty`, `status`. (`capacity` is gone — replaced by `maxGuests` / `maxInfants` / `maxPets`.)
 
 ### 5.5 DELETE `/listings/:id` (existing, admin)
 
@@ -424,10 +454,10 @@ CRUD lives at the existing `/featured-areas` endpoint (admin-gated for writes). 
 
 ## 10. Suggested Destinations
 
-Writes are admin-only; reads are user-auth (the homepage uses them).
+Writes are admin-only. Reads accept **either an admin token or a user token** (`authenticateAny` middleware) — the homepage uses them and the admin panel needs to list/edit them.
 
 ### 10.1 GET `/suggested-destinations`
-**Auth:** user.
+**Auth:** user OR admin.
 **Query:** `?q&page&limit&isActive=true|false`
 **Response 200:**
 ```json
@@ -454,7 +484,7 @@ Writes are admin-only; reads are user-auth (the homepage uses them).
 **Auth:** admin. **Body:** `[ <suggestion>, <suggestion>, ... ]`
 **Response 201:** `{ "message": "Created", "count": N, "data": [...] }`.
 
-### 10.4 GET `/suggested-destinations/:id` (user) · PUT `/suggested-destinations/:id` (admin) · DELETE `/suggested-destinations/:id` (admin)
+### 10.4 GET `/suggested-destinations/:id` (user OR admin) · PUT `/suggested-destinations/:id` (admin) · DELETE `/suggested-destinations/:id` (admin)
 
 ---
 
@@ -525,6 +555,7 @@ Audit entries are written automatically by every mutating admin endpoint via [ut
 | `admin.create` / `admin.update` / `admin.delete` | `/admin/admins*` |
 | `user.update` / `user.suspend` / `user.activate` / `user.delete` | `/admin/users/:id*` |
 | `user.upgrade_to_host` / `user.downgrade_from_host` | `/admin/users/:id/(up|down)grade-*` |
+| `host.create` / `host.update` | `/admin/hosts*` |
 | `listing.approve` / `listing.reject` / `listing.pause` / `listing.activate` | `/admin/listings/:id/*` |
 | `booking.cancel` | `/admin/bookings/:id/cancel` |
 | `payment.refund` | `/admin/payments/:id/refund` |
@@ -551,6 +582,8 @@ Audit entries are written automatically by every mutating admin endpoint via [ut
 | `/admin/users/:id/upgrade-to-host` | POST | super_admin/admin |
 | `/admin/users/:id/downgrade-from-host` | POST | super_admin/admin |
 | `/admin/users/:id/bookings` | GET | admin |
+| `/admin/hosts` | POST | super_admin/admin |
+| `/admin/hosts/:id` | PATCH | super_admin/admin |
 | `/admin/listings` | GET | admin |
 | `/admin/listings/:id` | GET | admin |
 | `/admin/listings/:id/approve` | POST | super_admin/admin |

@@ -23,7 +23,9 @@ A short-stay / Airbnb-style booking platform backend. This document captures the
 
 Entry point: [index.js](index.js). Default port: `9000`.
 
-CORS allow-list: `http://localhost:5173`, `http://127.0.0.1:5500`, `http://192.168.0.157:9000`, `https://api.stayfinderindia.net`, plus anything in `process.env.FRONTEND_URLS` (comma-separated).
+CORS allow-list: `http://localhost:5173`, `http://127.0.0.1:5500`, `http://192.168.0.157:9000`, `https://api.stayfinderindia.net`, `https://api.stayfinder.com`, `https://api.stayfinder.in`, plus anything in `process.env.FRONTEND_URLS` (comma-separated).
+
+In dev (`NODE_ENV !== 'production'`) **any** `http://localhost:<port>` or `http://127.0.0.1:<port>` origin is allowed automatically. Allowed methods: `GET, POST, PUT, DELETE, PATCH, OPTIONS`. Allowed headers: `Content-Type, Authorization`. Credentials enabled.
 
 ---
 
@@ -49,7 +51,7 @@ Folder map:
 - [routes/](routes/) — Express routers
 - [models/](models/) — Mongoose schemas
 - [services/](services/) — booking & payment business logic
-- [middlewares/](middlewares/) — `authenticate`, `authenticateAdmin`, `authorizeRoles`, `authorizeAdminRoles`, `asyncHandler`
+- [middlewares/](middlewares/) — `authenticate`, `authenticateAdmin`, `authenticateAny`, `authorizeRoles`, `authorizeAdminRoles`, `asyncHandler`
 - [middleware/rateLimit.js](middleware/rateLimit.js) — OTP rate limiter (singular folder, separate from `middlewares/`)
 - [config/](config/) — DB connection, S3 client, stock images
 - [constants/enums.js](constants/enums.js) — STATES, AMENITIES, roles, suggested destinations
@@ -97,13 +99,18 @@ Admins are seeded via [scripts/seedSuperAdmin.js](scripts/seedSuperAdmin.js). Th
 ### 3.3 Listing — [models/listing.model.js](models/listing.model.js)
 `hostId` is an `ObjectId` ref to **`User`** (must have the `host` role). `createdByAdminId` records which admin created the listing on behalf of the host.
 
-Fields: `hostId` (ref User), `createdByAdminId` (ref Admin), `title`, `description`, `imageUrls[]`, `address`, `city`, `state` (enum STATES), `pincode`, `amenities[]` (enum AMENITIES), `location` (GeoJSON Point + 2dsphere index), `pricePerNight`, `currency` (default `INR`), `bedrooms`, `maxGuests`, `capacity { adults, children, infants, pets }`, `houseRules[]`, `safetyAndProperty[]`.
+Fields: `hostId` (ref User), `createdByAdminId` (ref Admin), `title`, `description`, `imageUrls[]`, `address`, `city`, `state` (enum STATES), `pincode`, `amenities[]` (enum AMENITIES), `location` (GeoJSON Point + 2dsphere index), `pricePerNight`, `currency` (default `INR`), `bedrooms`, `houseRules[]`, `safetyAndProperty[]`.
+
+**Capacity model** (changed — no longer per-category caps):
+- `maxGuests` (required, min 1) — the single shared cap; a booking's `adults + children` must not exceed it.
+- `maxInfants` (default 0) — infants do **not** count toward `maxGuests`; capped separately.
+- `maxPets` (default 0) — pets do **not** count toward `maxGuests`; `0` means pets not allowed.
+
+So a listing with `maxGuests: 4` accepts any people mix summing to ≤ 4 (4 adults, or 2 adults + 2 children, etc.). There is no fixed adults/children split. Booking-time rules also require **at least 1 adult**.
 
 Moderation fields:
 - `status` — enum `['active', 'paused', 'draft', 'pending_review', 'approved', 'rejected']`, default `'active'`, indexed
 - `rejectionReason`, `approvedAt`, `approvedByAdminId`
-
-Pre-validate hook: rejects when `adults + children > maxGuests`.
 
 ### 3.4 Booking — [models/booking.model.js](models/booking.model.js)
 `listingId` → Listing, `guestId` → User, `checkInDate`, `checkOutDate`, `guests {adults, children, infants, pets}`, `message`.
@@ -177,6 +184,7 @@ JWT payload (admin): `{ userId: admin._id, userRoles: 'admin', email }`.
 - `authorizeRoles(...allowedRoles)` — checks `req.user.roles` overlap (used for `host`-only endpoints).
 - `authenticateAdmin` — reads cookie `jwt` or `Authorization: Bearer …`, verifies, loads `Admin` by `decoded.userId`. Rejects suspended admins. Sets `req.admin`, `req.adminId`, `req.adminRole`.
 - `authorizeAdminRoles(...allowedRoles)` — restricts to specific admin roles (`super_admin`, `admin`, `support`).
+- `authenticateAny` — accepts **either** an admin token or a user token. Tries `Admin.findById(decoded.userId)` first, falls back to `User`. Sets `req.admin`/`req.adminId` OR `req.user`/`req.userId`. Used on shared-read endpoints (e.g. `GET /suggested-destinations`) that both the admin panel and the user app need to call.
 
 ### 4.4 Seeding the first admin
 ```powershell
@@ -256,8 +264,8 @@ All paths under `/api/v1`. Auth column:
 ### 5.7 Suggested Destinations — [routes/suggestion.routes.js](routes/suggestion.routes.js)
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
-| GET | `/suggested-destinations` | user | Paginated list |
-| GET | `/suggested-destinations/:id` | user | Detail |
+| GET | `/suggested-destinations` | user OR admin | Paginated list (uses `authenticateAny`) |
+| GET | `/suggested-destinations/:id` | user OR admin | Detail (uses `authenticateAny`) |
 | POST | `/suggested-destinations` | admin | Create |
 | POST | `/suggested-destinations/bulk` | admin | Bulk create |
 | PUT | `/suggested-destinations/:id` | admin | Update |
@@ -326,6 +334,8 @@ See [backend_data.md](backend_data.md) for full request/response detail. Summary
 | POST | `/admin/users/:id/upgrade-to-host` | super_admin/admin |
 | POST | `/admin/users/:id/downgrade-from-host` | super_admin/admin |
 | GET | `/admin/users/:id/bookings` | admin |
+| POST | `/admin/hosts` | super_admin/admin |
+| PATCH | `/admin/hosts/:id` | super_admin/admin |
 | GET | `/admin/listings` | admin |
 | GET | `/admin/listings/:id` | admin |
 | POST | `/admin/listings/:id/approve` | super_admin/admin |

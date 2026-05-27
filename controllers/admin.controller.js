@@ -298,6 +298,124 @@ const deleteUser = async (req, res) => {
   }
 };
 
+// Admin creates a new host User directly (no OTP, no self-signup).
+// Host does not log in themselves — admin manages everything on their behalf.
+const createHost = async (req, res) => {
+  try {
+    const { phone, name, email, dateOfBirth } = req.body || {};
+
+    if (!phone || !name || !email || !dateOfBirth) {
+      return res.status(422).json({
+        message: 'phone, name, email, dateOfBirth are required',
+      });
+    }
+
+    const normalizedPhone = String(phone).replace(/\D/g, '').replace(/^91(?=\d{10}$)/, '');
+    if (!/^[6-9]\d{9}$/.test(normalizedPhone)) {
+      return res.status(422).json({ message: 'invalid Indian mobile number' });
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return res.status(422).json({ message: 'invalid email' });
+    }
+
+    const dob = new Date(dateOfBirth);
+    if (Number.isNaN(dob.getTime())) {
+      return res.status(422).json({ message: 'invalid dateOfBirth' });
+    }
+
+    const existing = await User.findOne({ $or: [{ phone: normalizedPhone }, { email: normalizedEmail }] }).lean();
+    if (existing) {
+      return res.status(409).json({
+        message: 'user with this phone or email already exists. Use /admin/users/:id/upgrade-to-host instead.',
+        data: { existingUserId: existing._id },
+      });
+    }
+
+    const user = await User.create({
+      phone: normalizedPhone,
+      name: String(name).trim(),
+      email: normalizedEmail,
+      dateOfBirth: dob,
+      roles: ['guest', 'host'],
+    });
+
+    await writeAudit(req, {
+      action: 'host.create',
+      target: { model: 'User', id: user._id },
+      payload: { phone: normalizedPhone, email: normalizedEmail },
+    });
+
+    return res.status(201).json({ message: 'host created', data: user });
+  } catch (err) {
+    return res.status(500).json({ message: 'internal_error', details: err?.message });
+  }
+};
+
+// Admin edits an existing host. Only users with the `host` role can be edited here.
+// For non-host edits, use PATCH /admin/users/:id.
+const updateHost = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!isOid(id)) return res.status(400).json({ message: 'invalid id' });
+
+    const existing = await User.findById(id);
+    if (!existing) return res.status(404).json({ message: 'host not found' });
+    if (!existing.roles?.includes('host')) {
+      return res.status(400).json({ message: 'user is not a host. Use /admin/users/:id for non-hosts.' });
+    }
+
+    const updates = {};
+
+    if (req.body.name !== undefined) updates.name = String(req.body.name).trim();
+
+    if (req.body.email !== undefined) {
+      const normalizedEmail = String(req.body.email).trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+        return res.status(422).json({ message: 'invalid email' });
+      }
+      const dup = await User.findOne({ email: normalizedEmail, _id: { $ne: id } }).lean();
+      if (dup) return res.status(409).json({ message: 'email already used by another user' });
+      updates.email = normalizedEmail;
+    }
+
+    if (req.body.phone !== undefined) {
+      const normalizedPhone = String(req.body.phone).replace(/\D/g, '').replace(/^91(?=\d{10}$)/, '');
+      if (!/^[6-9]\d{9}$/.test(normalizedPhone)) {
+        return res.status(422).json({ message: 'invalid Indian mobile number' });
+      }
+      const dup = await User.findOne({ phone: normalizedPhone, _id: { $ne: id } }).lean();
+      if (dup) return res.status(409).json({ message: 'phone already used by another user' });
+      updates.phone = normalizedPhone;
+    }
+
+    if (req.body.dateOfBirth !== undefined) {
+      const dob = new Date(req.body.dateOfBirth);
+      if (Number.isNaN(dob.getTime())) {
+        return res.status(422).json({ message: 'invalid dateOfBirth' });
+      }
+      updates.dateOfBirth = dob;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(200).json({ message: 'no_changes', data: existing });
+    }
+
+    const updated = await User.findByIdAndUpdate(id, { $set: updates }, { new: true, runValidators: true });
+
+    await writeAudit(req, {
+      action: 'host.update',
+      target: { model: 'User', id },
+      payload: { fields: Object.keys(updates) },
+    });
+
+    return res.status(200).json({ message: 'host updated', data: updated });
+  } catch (err) {
+    return res.status(500).json({ message: 'internal_error', details: err?.message });
+  }
+};
+
 const upgradeToHost = async (req, res) => {
   try {
     const { id } = req.params;
@@ -801,7 +919,7 @@ export {
   listAdmins, createAdmin, updateAdmin, deleteAdmin,
   // users
   getAllUsers, getUserById, updateUser, suspendUser, activateUser, deleteUser,
-  upgradeToHost, downgradeFromHost, getUserBookings,
+  upgradeToHost, downgradeFromHost, getUserBookings, createHost, updateHost,
   // listings
   listListings, getListingAdmin, approveListing, rejectListing, pauseListing, activateListing,
   // bookings

@@ -138,15 +138,30 @@ const updateBooking = async(bookingId, userId, updates) => {
   console.log('available: ', available);
   if (!available) throw new ConflictError('Dates are not available');
 
-  // Guests update → check against listing capacity
+  // Guests update → check against listing limits
+  // adults + children share maxGuests; infants and pets have their own caps.
   if (updates.guests) {
     const listing = await Listing.findById(booking.listingId);
-    const total = (updates.guests.adults || 0) + (updates.guests.children || 0);
+    const adults = updates.guests.adults || 0;
+    const children = updates.guests.children || 0;
+    const infants = updates.guests.infants || 0;
+    const pets = updates.guests.pets || 0;
+    const total = adults + children;
+
+    if (adults < 1) {
+      throw new ValidationError('ADULT_REQUIRED', 'At least one adult is required');
+    }
     if (total > listing.maxGuests) {
       throw new ValidationError(
         'CAPACITY_EXCEEDED',
         `Total guests (${total}) exceed max allowed (${listing.maxGuests})`,
       );
+    }
+    if (infants > (listing.maxInfants || 0)) {
+      throw new ValidationError('INFANTS_EXCEEDED', `Infants (${infants}) exceed max allowed (${listing.maxInfants || 0})`);
+    }
+    if (pets > (listing.maxPets || 0)) {
+      throw new ValidationError('PETS_EXCEEDED', `Pets (${pets}) exceed max allowed (${listing.maxPets || 0})`);
     }
     booking.guests = updates.guests;
   }

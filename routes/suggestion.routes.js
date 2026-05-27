@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticate, authenticateAdmin } from '../middlewares/authMiddleware.js';
+import { authenticateAny, authenticateAdmin } from '../middlewares/authMiddleware.js';
 import {
   createSuggested,
   createSuggestedBulk,
@@ -12,8 +12,8 @@ import {
 const router = express.Router();
 
 // Reads are open to authenticated users (homepage uses them).
-router.get('/', authenticate, getSuggested);
-router.get('/:id', authenticate, getSuggestedById);
+router.get('/', authenticateAny, getSuggested);
+router.get('/:id', authenticateAny, getSuggestedById);
 
 // Writes are admin-only.
 router.post('/bulk', authenticateAdmin, createSuggestedBulk);

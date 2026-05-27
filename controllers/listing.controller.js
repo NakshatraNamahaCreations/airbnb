@@ -30,7 +30,8 @@ const registerListing = asyncHandler(async(req, res) => {
     currency = 'INR',
     bedrooms,
     maxGuests,
-    capacity = {},
+    maxInfants = 0,
+    maxPets = 0,
     amenities = [],
     location = {},
     houseRules = [],
@@ -40,6 +41,10 @@ const registerListing = asyncHandler(async(req, res) => {
 
   if (!hostId || !mongoose.Types.ObjectId.isValid(hostId)) {
     return res.status(422).json({ message: 'hostId (User _id) is required' });
+  }
+
+  if (!maxGuests || Number(maxGuests) < 1) {
+    return res.status(422).json({ message: 'maxGuests must be at least 1' });
   }
 
   const host = await User.findById(hostId).select('roles status').lean();
@@ -63,7 +68,8 @@ const registerListing = asyncHandler(async(req, res) => {
     currency,
     bedrooms,
     maxGuests,
-    capacity,
+    maxInfants,
+    maxPets,
     amenities,
     location,
     houseRules,
@@ -158,11 +164,10 @@ const searchListings = asyncHandler(async(req, res) => {
   const { adults = 0, children = 0, infants = 0, pets = 0 } = guests || {};
   const totalGuests = adults + children;
 
-  if (adults > 0) filter['capacity.adults'] = { $gte: adults };
-  if (children > 0) filter['capacity.children'] = { $gte: children };
-  if (infants > 0) filter['capacity.infants'] = { $gte: infants };
-  if (pets > 0) filter['capacity.pets'] = { $gte: pets };
+  // adults + children share the maxGuests cap; infants and pets have their own caps
   if (totalGuests > 0) filter.maxGuests = { $gte: totalGuests };
+  if (infants > 0) filter.maxInfants = { $gte: infants };
+  if (pets > 0) filter.maxPets = { $gte: pets };
 
 
   console.log({ longitude, latitude });
@@ -206,8 +211,9 @@ const searchListings = asyncHandler(async(req, res) => {
   },
   {
     $project: {
-      capacity: 1,
       maxGuests: 1,
+      maxInfants: 1,
+      maxPets: 1,
       title: 1,
       // state: 1,
       address: 1,
@@ -470,8 +476,8 @@ const updateListing = asyncHandler(async(req, res) => {
     'currency',
     'bedrooms',
     'maxGuests',
-    'capacity',
-    'rating',
+    'maxInfants',
+    'maxPets',
     'houseRules',
     'safetyAndProperty',
     'status',

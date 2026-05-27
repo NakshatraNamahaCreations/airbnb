@@ -4,7 +4,7 @@ import {
   adminLogin, adminLogout, getMe, updateMe,
   listAdmins, createAdmin, updateAdmin, deleteAdmin,
   getAllUsers, getUserById, updateUser, suspendUser, activateUser, deleteUser,
-  upgradeToHost, downgradeFromHost, getUserBookings,
+  upgradeToHost, downgradeFromHost, getUserBookings, createHost, updateHost,
   listListings, getListingAdmin, approveListing, rejectListing, pauseListing, activateListing,
   listBookings, getBookingAdmin, cancelBookingByAdmin,
   listPayments, getPaymentAdmin, refundPayment,
@@ -33,6 +33,10 @@ router.get('/admins', authorizeAdminRoles('super_admin'), listAdmins);
 router.post('/admins', authorizeAdminRoles('super_admin'), createAdmin);
 router.patch('/admins/:id', authorizeAdminRoles('super_admin'), updateAdmin);
 router.delete('/admins/:id', authorizeAdminRoles('super_admin'), deleteAdmin);
+
+/* hosts (admin-created users with host role) */
+router.post('/hosts', authorizeAdminRoles('super_admin', 'admin'), createHost);
+router.patch('/hosts/:id', authorizeAdminRoles('super_admin', 'admin'), updateHost);
 
 /* users */
 router.get('/users', getAllUsers);

@@ -93,4 +93,53 @@ const authorizeAdminRoles = (...allowedRoles) => {
   };
 };
 
-export { authenticate, authorizeRoles, authenticateAdmin, authorizeAdminRoles };
+// Accept either an admin token or a user token.
+// - admin token wins if both happen to verify
+// - sets req.admin / req.adminId OR req.user / req.userId accordingly
+const authenticateAny = asyncHandler(async (req, res, next) => {
+  const bearer =
+    (req.get("authorization")?.startsWith("Bearer ") &&
+      req.get("authorization").split(" ")[1]) || null;
+  const token = bearer || req.cookies?.jwt;
+
+  if (!token) {
+    return res.status(401).json({ code: "unauthorized", message: "no token" });
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch (err) {
+    return res.status(401).json({ code: "unauthorized", message: err.message });
+  }
+
+  // Try admin first
+  const admin = await Admin.findById(decoded.userId).lean();
+  if (admin) {
+    if (admin.status === "suspended") {
+      return res.status(403).json({ code: "admin_suspended" });
+    }
+    req.admin = admin;
+    req.adminId = admin._id;
+    req.adminRole = admin.role;
+    return next();
+  }
+
+  // Fall through to user
+  const user = await User.findById(decoded.userId);
+  if (user) {
+    if (user.status === "suspended") {
+      return res.status(403).json({ code: "user_suspended" });
+    }
+    if (user.status === "deleted") {
+      return res.status(403).json({ code: "user_deleted" });
+    }
+    req.user = user;
+    req.userId = user._id;
+    return next();
+  }
+
+  return res.status(401).json({ code: "unauthorized", message: "no matching account" });
+});
+
+export { authenticate, authorizeRoles, authenticateAdmin, authorizeAdminRoles, authenticateAny };

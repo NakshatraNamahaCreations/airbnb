@@ -27,14 +27,12 @@ const listingSchema = new mongoose.Schema({
   currency: { type: String, default: 'INR' },
 
   bedrooms: { type: Number, required: true, min: 1 },
-  maxGuests: { type: Number, required: true },
 
-  capacity: {
-    adults: { type: Number, required: true, min: 1 },
-    children: { type: Number, required: true, min: 0 },
-    infants: { type: Number, required: true, min: 0 },
-    pets: { type: Number, required: true, min: 0 },
-  },
+  // Single shared limit: adults + children must not exceed maxGuests.
+  // Infants and pets are tracked separately and do NOT count toward maxGuests.
+  maxGuests: { type: Number, required: true, min: 1 },
+  maxInfants: { type: Number, default: 0, min: 0 },
+  maxPets: { type: Number, default: 0, min: 0 },
 
   houseRules: { type: [String], default: [] },
   safetyAndProperty: { type: [String], default: [] },
@@ -46,14 +44,6 @@ const listingSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 listingSchema.index({ location: '2dsphere' });
-
-listingSchema.pre('validate', function(next) {
-  const totalGuests = this.capacity.adults + this.capacity.children;
-  if (totalGuests > this.maxGuests) {
-    return next(new Error(`Total guests (adults + children) cannot exceed ${this.maxGuests}.`));
-  }
-  next();
-});
 
 const Listing = mongoose.model('Listing', listingSchema);
 export { LISTING_STATUS };

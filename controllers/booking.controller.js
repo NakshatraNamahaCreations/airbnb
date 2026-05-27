@@ -46,23 +46,22 @@ const createBooking = async(req, res) => {
       throw new NotFoundError('Listing not found');
     }
 
-    // Validate guests against listing capacity
+    // Validate guests against listing limits.
+    // adults + children share the maxGuests cap; infants and pets have their own caps.
     const { adults = 0, children = 0, infants = 0, pets = 0 } = guests || {};
     const totalGuests = adults + children;
+
+    if (adults < 1) {
+      throw new ValidationError('ADULT_REQUIRED', 'At least one adult is required');
+    }
     if (totalGuests > listing.maxGuests) {
       throw new ValidationError('CAPACITY_EXCEEDED', `Total guests (${totalGuests}) exceed max allowed (${listing.maxGuests})`);
     }
-    if (adults > listing.capacity.adults) {
-      throw new ValidationError('ADULTS_EXCEEDED', `Adults (${adults}) exceed max allowed (${listing.capacity.adults})`);
+    if (infants > (listing.maxInfants || 0)) {
+      throw new ValidationError('INFANTS_EXCEEDED', `Infants (${infants}) exceed max allowed (${listing.maxInfants || 0})`);
     }
-    if (children > listing.capacity.children) {
-      throw new ValidationError('CHILDREN_EXCEEDED', `Children (${children}) exceed max allowed (${listing.capacity.children})`);
-    }
-    if (infants > listing.capacity.infants) {
-      throw new ValidationError('INFANTS_EXCEEDED', `Infants (${infants}) exceed max allowed (${listing.capacity.infants})`);
-    }
-    if (pets > listing.capacity.pets) {
-      throw new ValidationError('PETS_EXCEEDED', `Pets (${pets}) exceed max allowed (${listing.capacity.pets})`);
+    if (pets > (listing.maxPets || 0)) {
+      throw new ValidationError('PETS_EXCEEDED', `Pets (${pets}) exceed max allowed (${listing.maxPets || 0})`);
     }
 
     // For single-unit: just ensure dates are available now (optional early check)

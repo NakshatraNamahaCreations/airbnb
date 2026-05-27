@@ -23,7 +23,7 @@ const presignPut = async({ key, contentType, expiresIn = 60 * 5 }) => {
   });
 
   const url = await getSignedUrl(s3, cmd, { expiresIn });
-  return { key, putUrl: url, publicUrl: publicUrlFor(key) };
+  return { key, url, publicUrl: publicUrlFor(key) };
 };
 
 export { presignPut, publicUrlFor, REGION, BUCKET, s3 };
