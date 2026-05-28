@@ -48,6 +48,7 @@ app.use(
         "https://api.stayfinderindia.net",
         "https://api.stayfinder.com",
         "https://api.stayfinder.in",
+        "https://stay-finder-admin-panel.netlify.app",
       ];
 
       if (process.env.FRONTEND_URLS) {
