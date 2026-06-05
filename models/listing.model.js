@@ -41,6 +41,13 @@ const listingSchema = new mongoose.Schema({
   rejectionReason: { type: String },
   approvedAt: { type: Date },
   approvedByAdminId: { type: mongoose.Types.ObjectId, ref: 'Admin' },
+
+  // Refund policy tier; snapshotted onto the booking at order time.
+  cancellationPolicy: {
+    type: String,
+    enum: ['flexible', 'moderate', 'strict'],
+    default: 'moderate',
+  },
 }, { timestamps: true });
 
 listingSchema.index({ location: '2dsphere' });

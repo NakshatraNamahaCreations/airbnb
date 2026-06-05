@@ -1,24 +1,32 @@
 import express from 'express';
-import { createBooking, getAllBookings, getBookingById, updateBooking, deleteBooking, acceptBooking, rejectBooking, bookingHistory } from '../controllers/booking.controller.js';
+import {
+  createBookingOrder,
+  verifyBookingPayment,
+  cancelBookingByGuest,
+  getAllBookings,
+  getBookingById,
+  bookingHistory,
+  updateBooking,
+  deleteBooking,
+} from '../controllers/booking.controller.js';
 import { authenticate } from '../middlewares/authMiddleware.js';
-
 
 const router = express.Router();
 
 router.use(authenticate);
 
-// booking
-// router.post('/:id/accept', acceptBooking);
-// router.post('/:id/reject', rejectBooking);
+// New Razorpay flow
+router.post('/order', createBookingOrder);
+router.post('/verify', verifyBookingPayment);
+router.post('/:bookingId/cancel', cancelBookingByGuest);
 
+// Reads (scoped to caller)
 router.get('/history', bookingHistory);
-
-router.post('/', createBooking);
 router.get('/', getAllBookings);
 router.get('/:id', getBookingById);
+
+// Legacy update / delete (kept for back-compat; admins use /admin/bookings/*)
 router.put('/:id', updateBooking);
 router.delete('/:id', deleteBooking);
-
-
 
 export default router;

@@ -309,7 +309,7 @@ console.log("userId",userId)
     // Only 'accepted' bookings block dates
     const overlapCount = await Booking.countDocuments({
       listingId: id,
-      status: 'accepted',
+      status: { $in: ['confirmed', 'pending_payment', 'accepted'] },
       checkInDate: { $lt: end },
       checkOutDate: { $gt: start },
     });
@@ -325,7 +325,7 @@ console.log("userId",userId)
   // Find accepted bookings for this listing in the next 3 months
   const blockedBookings = await Booking.find({
     listingId: id,
-    status: 'accepted',
+    status: { $in: ['confirmed', 'pending_payment', 'accepted'] },
     checkInDate: { $lt: threeMonthsLater },
     checkOutDate: { $gte: today },
   }).lean();

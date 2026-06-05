@@ -7,12 +7,14 @@ import mongoose from 'mongoose';
 /**
  * Check availability: true if no accepted booking overlaps the requested range
  */
+const BLOCKING_STATUSES = ['confirmed', 'pending_payment', 'accepted'];
+
 const checkAvailability = async(listingId, checkInDate, checkOutDate) => {
   const overlapping = await Booking.find({
     listingId,
-    status: 'accepted',
-    checkInDate: { $lte: checkOutDate },
-    checkOutDate: { $gte: checkInDate },
+    status: { $in: BLOCKING_STATUSES },
+    checkInDate: { $lt: checkOutDate },
+    checkOutDate: { $gt: checkInDate },
   });
 
   return { available: overlapping.length === 0, overlapping };
@@ -109,9 +111,9 @@ const checkAvailabilityForUpdate = async(listingId, checkInDate, checkOutDate, b
   const overlapping = await Booking.find({
     listingId,
     _id: { $ne: bookingId },
-    status: 'accepted',
-    checkInDate: { $lte: checkOutDate },
-    checkOutDate: { $gte: checkInDate },
+    status: { $in: BLOCKING_STATUSES },
+    checkInDate: { $lt: checkOutDate },
+    checkOutDate: { $gt: checkInDate },
   }).lean();
 
   console.log('overlapping: ', overlapping);

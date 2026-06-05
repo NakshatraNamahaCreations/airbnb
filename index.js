@@ -19,6 +19,9 @@ import feedbackRoutes from "./routes/feedback.routes.js";
 import suggestionRoutes from "./routes/suggestion.routes.js";
 import kycRoutes from "./routes/kyc.routes.js";
 import ipvRoutes from "./routes/ipv.routes.js";
+import subscriptionRoutes from "./routes/subscription.routes.js";
+import webhookRoutes from "./routes/webhook.routes.js";
+import expiryJob from "./services/expiryJob.service.js";
 
 const PORT = process.env.PORT || 9000;
 
@@ -32,11 +35,16 @@ try {
 
 const app = express();
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
 app.use(compression());
 app.use(morgan("dev"));
+app.use(cookieParser());
+
+// IMPORTANT: webhook route is mounted BEFORE express.json() so the raw body
+// remains untouched for HMAC signature verification.
+app.use("/api/v1/payments/razorpay/webhook", webhookRoutes);
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.use(
   cors({
@@ -90,6 +98,7 @@ app.use("/api/v1/suggested-destinations", suggestionRoutes);
 app.use("/api/v1/feedbacks", feedbackRoutes);
 app.use("/api/v1/identity-verifications", kycRoutes);
 app.use("/api/v1/ipv-verifications", ipvRoutes);
+app.use("/api/v1/subscriptions", subscriptionRoutes);
 
 app.get("/", (req, res) => {
   return res.status(200).json({ message: "Hello from air-bnb clone v1" });
@@ -129,4 +138,5 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Server is running on port ${PORT}`);
+  expiryJob.start();
 });

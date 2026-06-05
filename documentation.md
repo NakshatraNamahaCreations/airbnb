@@ -237,12 +237,16 @@ All paths under `/api/v1`. Auth column:
 ### 5.4 Bookings — [routes/booking.routes.js](routes/booking.routes.js)
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
+| POST | `/bookings/order` | user | Razorpay flow — create pending booking + order |
+| POST | `/bookings/verify` | user | Verify Razorpay signature, confirm booking |
+| POST | `/bookings/:bookingId/cancel` | user | Cancel + refund per policy |
 | GET | `/bookings/history` | user | Upcoming + previous bookings |
-| POST | `/bookings` | user | Create booking (txn) |
-| GET | `/bookings` | user | **Scoped** to current user; paginated |
+| GET | `/bookings` | user | Scoped to caller; paginated |
 | GET | `/bookings/:id` | user | Detail |
-| PUT | `/bookings/:id` | user | Update |
-| DELETE | `/bookings/:id` | user | Cancel |
+| PUT | `/bookings/:id` | user | Update (legacy) |
+| DELETE | `/bookings/:id` | user | Delete (legacy) |
+
+> The old `POST /bookings` (random-amount payment, no signature check) has been **removed**. All booking creation goes through `/bookings/order` + `/bookings/verify`.
 
 ### 5.5 Wishlists / Favorites — [routes/wishlist.routes.js](routes/wishlist.routes.js)
 | Method | Path | Auth | Purpose |
@@ -305,11 +309,23 @@ All paths under `/api/v1`. Auth column:
 ### 5.12 Payments — [routes/payment.routes.js](routes/payment.routes.js)
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
-| POST | `/payments` | user | Create payment |
+| POST | `/payments` | user | Create payment (legacy) |
 | GET | `/payments` | user | List own payments |
 | GET | `/payments/:id` | user | Detail |
 | PUT | `/payments/:id` | user | Update |
 | DELETE | `/payments/:id` | user | Delete |
+
+### 5.12a Subscriptions — [routes/subscription.routes.js](routes/subscription.routes.js)
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| POST | `/subscriptions/order` | user | Create Razorpay order for premium plan |
+| POST | `/subscriptions/verify` | user | Verify + activate subscription |
+| GET | `/subscriptions/me` | user | Current status (source of truth) |
+
+### 5.12b Webhook — [routes/webhook.routes.js](routes/webhook.routes.js)
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| POST | `/payments/razorpay/webhook` | Razorpay (HMAC) | Out-of-band payment / refund events |
 
 ### 5.13 Admin endpoints — [routes/admin.routes.js](routes/admin.routes.js)
 See [backend_data.md](backend_data.md) for full request/response detail. Summary:
@@ -390,6 +406,58 @@ Response envelope:
   "pagination": { "total": 123, "page": 1, "limit": 20, "pages": 7 }
 }
 ```
+
+---
+
+## 7a. Razorpay Payment Flow
+
+The booking and subscription flows go through Razorpay. The mobile app **must not** grant entitlement on its own — the server is the source of truth.
+
+### Booking
+1. `POST /api/v1/bookings/order` — creates a `Booking` with `status: pending_payment` and a Razorpay order. Returns `{ bookingId, orderId, amount }`. Expires after 15 min (configurable via `BOOKING_PAYMENT_TTL_MIN`).
+2. App opens Razorpay Checkout with `KEY_ID` + `orderId` + `amount`.
+3. `POST /api/v1/bookings/verify` — server checks HMAC of `${orderId}|${paymentId}` against `RAZORPAY_KEY_SECRET` (constant-time), cross-checks with `GET /v1/payments/:id` for status, amount, and order match, then flips to `confirmed`. Idempotent on `razorpayPaymentId`.
+4. `POST /api/v1/bookings/:bookingId/cancel` — computes refund per the snapshotted `cancellationPolicy` (Flexible/Moderate/Strict), calls Razorpay refund API, sets `status: cancelled`. Service fee never refundable; tax refunds proportional to subtotal.
+
+### Subscription
+1. `POST /api/v1/subscriptions/order` — server-side plan price (see `constants/payment.js → SUBSCRIPTION_PLANS`). Rejects if already active.
+2. `POST /api/v1/subscriptions/verify` — same signature + cross-check as booking; activates `Subscription` with `activeUntil = now + plan.durationDays`.
+3. `GET /api/v1/subscriptions/me` — single source of truth for the app. Local caches must read through this.
+
+### Webhook
+`POST /api/v1/payments/razorpay/webhook` — Razorpay → us. **No app auth.** Mounted with `express.raw()` so the body remains the original bytes. We verify HMAC over the raw body with `RAZORPAY_WEBHOOK_SECRET`, dedupe on `X-Razorpay-Event-Id`, then handle `payment.captured`, `payment.failed`, `refund.created/processed/failed`. Events are persisted to `PaymentEvent` for audit.
+
+### Env vars
+```
+RAZORPAY_KEY_ID
+RAZORPAY_KEY_SECRET
+RAZORPAY_WEBHOOK_SECRET
+BOOKING_TAX_PERCENT=12          # optional
+SERVICE_FEE_PAISE=9900          # optional (₹99)
+BOOKING_PAYMENT_TTL_MIN=15      # optional
+EXPIRY_JOB_INTERVAL_MIN=5       # optional
+EXPIRY_JOB_DISABLED=false       # set 'true' to disable in-process cron
+```
+
+### Expiry cron
+An in-process sweep ([services/expiryJob.service.js](services/expiryJob.service.js)) runs every `EXPIRY_JOB_INTERVAL_MIN` minutes (default 5) and flips any `pending_payment` `Booking` / `Subscription` whose `expiresAt` has passed to `status: 'expired'`. This frees up date ranges that a guest abandoned mid-payment.
+
+If you run multiple API instances, set `EXPIRY_JOB_DISABLED=true` everywhere and call [scripts/expirePendingBookings.js](scripts/expirePendingBookings.js) from a single external scheduler (system cron, GCP Scheduler, etc.) so the sweep only runs once.
+
+### Money & policy constants
+- Tax: 12% on subtotal (configurable).
+- Service fee: flat ₹99 / 9900 paise per booking — **non-refundable**.
+- Booking TTL: 15 min in `pending_payment` before auto-expiry.
+- Subscription plan: `premium_monthly` → ₹199 / 30 days.
+- Cancellation policies (Airbnb-style defaults, override in `constants/payment.js`):
+  - **Flexible** — full refund ≥24h before; otherwise 0%.
+  - **Moderate** — full ≥5d; 50% ≥1d; 0% under 1d.
+  - **Strict** — 50% ≥7d; 0% under 7d.
+- Tax refunded proportional to the refunded subtotal.
+
+### See also
+- [RAZORPAY_API_EXAMPLES.md](RAZORPAY_API_EXAMPLES.md) — full curl examples for every endpoint.
+- [RAZORPAY_KEYS_ROTATION.md](RAZORPAY_KEYS_ROTATION.md) — runbook for rotating keys without downtime.
 
 ---
 

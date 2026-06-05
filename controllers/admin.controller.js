@@ -12,6 +12,7 @@ import AuditLog from '../models/auditLog.model.js';
 import { generateAdminToken } from '../utils/createToken.js';
 import { parsePagination, buildPaginationMeta } from '../utils/pagination.js';
 import { writeAudit } from '../utils/auditLogger.js';
+import razorpayService from '../services/razorpay.service.js';
 
 const isOid = (s) => mongoose.Types.ObjectId.isValid(s);
 
@@ -707,23 +708,40 @@ const refundPayment = async (req, res) => {
 
     const payment = await Payment.findById(id);
     if (!payment) return res.status(404).json({ message: 'payment not found' });
+    if (!payment.razorpayPaymentId) {
+      return res.status(422).json({ message: 'payment has no razorpayPaymentId — cannot refund' });
+    }
 
     const newRefunded = (payment.refundedAmount || 0) + Number(amount);
     if (newRefunded > payment.amount) {
       return res.status(422).json({ message: 'refund exceeds captured amount' });
     }
 
+    // Call Razorpay first; only mutate local state if the gateway accepts.
+    let refundResponse;
+    try {
+      refundResponse = await razorpayService.refundPayment({
+        paymentId: payment.razorpayPaymentId,
+        amountPaise: Number(amount),
+        notes: { paymentId: String(payment._id), reason: reason || '', actorAdminId: String(req.adminId) },
+        speed: 'normal',
+      });
+    } catch (err) {
+      return res.status(502).json({ message: 'razorpay refund failed', details: err?.message });
+    }
+
     payment.refundedAmount = newRefunded;
     payment.status = newRefunded === payment.amount ? 'refunded' : 'partially_refunded';
     payment.refunds.push({
+      refundId: refundResponse.id,
       amount: Number(amount),
       reason: reason || '',
-      status: 'initiated',
+      status: refundResponse.status || 'initiated',
       processedByAdminId: req.adminId,
     });
     await payment.save();
 
-    await writeAudit(req, { action: 'payment.refund', target: { model: 'Payment', id }, payload: { amount, reason } });
+    await writeAudit(req, { action: 'payment.refund', target: { model: 'Payment', id }, payload: { amount, reason, razorpayRefundId: refundResponse.id } });
     return res.status(200).json({ message: 'refund initiated', data: payment });
   } catch (err) {
     return res.status(500).json({ message: 'internal_error', details: err?.message });

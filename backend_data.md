@@ -609,6 +609,45 @@ Audit entries are written automatically by every mutating admin endpoint via [ut
 
 ---
 
+## 13a. User-facing Razorpay payment flow
+
+Not strictly admin endpoints, but listed here for completeness — the admin panel may need to display data the mobile flow produces (orders, refunds, subscriptions). Full curl examples in [RAZORPAY_API_EXAMPLES.md](RAZORPAY_API_EXAMPLES.md).
+
+### Booking
+| Method | Path | Auth | Notes |
+| --- | --- | --- | --- |
+| POST | `/api/v1/bookings/order` | user | Creates `Booking{status: pending_payment}` + Razorpay order. TTL 15 min. |
+| POST | `/api/v1/bookings/verify` | user | HMAC of `${orderId}\|${paymentId}` + cross-check with `GET /v1/payments/:id` → `status: confirmed`. Idempotent. |
+| POST | `/api/v1/bookings/:bookingId/cancel` | user | Refund per `cancellationPolicy` (Flexible/Moderate/Strict). Service fee non-refundable. |
+
+### Subscription
+| Method | Path | Auth | Notes |
+| --- | --- | --- | --- |
+| POST | `/api/v1/subscriptions/order` | user | Server-side price (₹199 / 30d). Rejects if already active. |
+| POST | `/api/v1/subscriptions/verify` | user | Activates `Subscription` with `activeUntil = now + 30d`. |
+| GET | `/api/v1/subscriptions/me` | user | Single source of truth for the app. |
+
+### Webhook
+| Method | Path | Auth | Notes |
+| --- | --- | --- | --- |
+| POST | `/api/v1/payments/razorpay/webhook` | Razorpay HMAC | Mounted **before** `express.json()`. Verifies HMAC over raw body. Dedups on `X-Razorpay-Event-Id`. |
+
+### New error codes (returned in `{ code, message }` shape)
+`SIGNATURE_MISMATCH`, `AMOUNT_MISMATCH`, `ORDER_BOOKING_MISMATCH`, `BOOKING_NOT_PENDING`, `PAYMENT_EXPIRED`, `PAYMENT_NOT_CAPTURED`, `PAYMENT_GATEWAY`, `ALREADY_CONFIRMED` (409), `ALREADY_ACTIVE`, `NOT_CANCELABLE`, `REFUND_FAILED`, `UNKNOWN_PLAN`, `INTENT_NOT_PENDING`.
+
+### Admin refund (changed)
+The admin endpoint `POST /admin/payments/:id/refund` now actually calls Razorpay's refund API (was previously local-only). It refuses to run if the `Payment` doc has no `razorpayPaymentId`. On Razorpay failure it returns `502` and does not mutate local state.
+
+### Booking model — new fields
+`amountPaise`, `subtotalPaise`, `taxPaise`, `serviceFeePaise`, `currency`, `razorpayOrderId`, `razorpayPaymentId` (unique sparse), `razorpaySignature`, `cancellationPolicy`, `confirmedAt`, `expiresAt`, `refundAmountPaise`, `refundStatus`, `razorpayRefundId`. New statuses: `pending_payment`, `confirmed`, `cancelled`, `expired`, `failed` (legacy statuses still accepted in the enum for back-compat).
+
+### New models
+- `Subscription` — see [models/subscription.model.js](models/subscription.model.js).
+- `PaymentEvent` — webhook log + idempotency, see [models/paymentEvent.model.js](models/paymentEvent.model.js).
+- `Listing` — added `cancellationPolicy: enum['flexible','moderate','strict']`, default `'moderate'`.
+
+---
+
 ## 14. Not yet implemented (future work)
 
 These were considered but not built. They're optional and easy to add later.
