@@ -349,6 +349,8 @@ See [backend_data.md](backend_data.md) for full request/response detail. Summary
 | DELETE | `/admin/users/:id` | super_admin/admin |
 | POST | `/admin/users/:id/upgrade-to-host` | super_admin/admin |
 | POST | `/admin/users/:id/downgrade-from-host` | super_admin/admin |
+| POST | `/admin/users/:id/grant-premium` | super_admin/admin |
+| GET | `/admin/users/:id/subscription` | admin |
 | GET | `/admin/users/:id/bookings` | admin |
 | POST | `/admin/hosts` | super_admin/admin |
 | PATCH | `/admin/hosts/:id` | super_admin/admin |

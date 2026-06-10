@@ -9,6 +9,8 @@ import Booking from '../models/booking.model.js';
 import Payment from '../models/payment.model.js';
 import Feedback from '../models/feedback.model.js';
 import AuditLog from '../models/auditLog.model.js';
+import Subscription from '../models/subscription.model.js';
+import { SUBSCRIPTION_PLANS } from '../constants/payment.js';
 import { generateAdminToken } from '../utils/createToken.js';
 import { parsePagination, buildPaginationMeta } from '../utils/pagination.js';
 import { writeAudit } from '../utils/auditLogger.js';
@@ -464,6 +466,196 @@ const getUserBookings = async (req, res) => {
 };
 
 /* -------------------------------------------------------------------------- */
+/* SUBSCRIPTIONS — read                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * GET /admin/users/:id/subscription
+ *
+ * Returns the current subscription state for any user (read-only).
+ * Mirrors /subscriptions/me but for an arbitrary user id + includes
+ * admin-grant metadata.
+ */
+const getUserSubscription = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!isOid(id)) return res.status(400).json({ message: 'invalid id' });
+
+    const user = await User.findById(id).select('_id name email phone').lean();
+    if (!user) return res.status(404).json({ message: 'user not found' });
+
+    const now = new Date();
+    const active = await Subscription.findOne({
+      userId: id,
+      status: 'active',
+      activeUntil: { $gt: now },
+    })
+      .sort({ activeUntil: -1 })
+      .populate('grantedByAdminId', 'email name role')
+      .lean();
+
+    if (active) {
+      return res.status(200).json({
+        data: {
+          user,
+          subscription: {
+            _id: active._id,
+            status: 'active',
+            plan: active.plan,
+            activeUntil: active.activeUntil,
+            activeFrom: active.activeFrom,
+            source: active.source || 'razorpay',
+            grantedByAdmin: active.grantedByAdminId || null,
+            grantReason: active.grantReason || null,
+            lastPaymentAt: active.lastPaymentAt || null,
+            amountPaise: active.amountPaise,
+            currency: active.currency,
+          },
+        },
+      });
+    }
+
+    // No active sub — return the most recent one (for "expired" display) or none.
+    const latest = await Subscription.findOne({ userId: id })
+      .sort({ updatedAt: -1 })
+      .populate('grantedByAdminId', 'email name role')
+      .lean();
+
+    if (!latest) {
+      return res.status(200).json({
+        data: { user, subscription: { status: 'none', plan: null, activeUntil: null } },
+      });
+    }
+
+    const status = latest.activeUntil && latest.activeUntil <= now ? 'expired' : latest.status;
+    return res.status(200).json({
+      data: {
+        user,
+        subscription: {
+          _id: latest._id,
+          status,
+          plan: latest.plan,
+          activeUntil: latest.activeUntil || null,
+          activeFrom: latest.activeFrom || null,
+          source: latest.source || 'razorpay',
+          grantedByAdmin: latest.grantedByAdminId || null,
+          grantReason: latest.grantReason || null,
+          lastPaymentAt: latest.lastPaymentAt || null,
+          amountPaise: latest.amountPaise,
+          currency: latest.currency,
+        },
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ message: 'internal_error', details: err?.message });
+  }
+};
+
+/* -------------------------------------------------------------------------- */
+/* PREMIUM GRANTS                                                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * POST /admin/users/:id/grant-premium
+ *
+ * Admin grants (or extends) a subscription for a user without a Razorpay
+ * payment. `durationDays` defaults to the plan's standard length.
+ *
+ * If the user has an active subscription, this EXTENDS `activeUntil` by
+ * `durationDays`. Otherwise it creates a fresh `Subscription` row marked
+ * `source: 'admin_grant'`. Every call is captured in the audit log as
+ * `subscription.grant`.
+ */
+const grantPremium = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!isOid(id)) return res.status(400).json({ message: 'invalid id' });
+
+    const user = await User.findById(id).select('_id status').lean();
+    if (!user) return res.status(404).json({ message: 'user not found' });
+    if (user.status === 'deleted') {
+      return res.status(400).json({ message: 'user is deleted' });
+    }
+
+    const planId = req.body?.plan || 'premium_monthly';
+    const plan = SUBSCRIPTION_PLANS[planId];
+    if (!plan) return res.status(422).json({ message: `unknown plan: ${planId}` });
+
+    const durationDays = Number.parseInt(req.body?.durationDays, 10) || plan.durationDays;
+    if (durationDays < 1 || durationDays > 3650) {
+      return res.status(422).json({ message: 'durationDays must be 1..3650' });
+    }
+    const reason = String(req.body?.reason || '').trim();
+
+    const now = new Date();
+    const addMs = durationDays * 24 * 60 * 60 * 1000;
+
+    // If there's an active subscription, extend it. Otherwise create a fresh one.
+    const active = await Subscription.findOne({
+      userId: id,
+      status: 'active',
+      activeUntil: { $gt: now },
+    }).sort({ activeUntil: -1 });
+
+    let sub;
+    let extended = false;
+
+    if (active) {
+      active.activeUntil = new Date(active.activeUntil.getTime() + addMs);
+      // Carry the grant metadata onto the extension event.
+      active.grantedByAdminId = req.adminId;
+      if (reason) active.grantReason = reason;
+      // If the row was originally razorpay-sourced, keep source as-is; if it was
+      // already an admin_grant, that's fine too.
+      await active.save();
+      sub = active;
+      extended = true;
+    } else {
+      sub = await Subscription.create({
+        userId: id,
+        plan: plan.id,
+        amountPaise: 0,            // no money changed hands
+        currency: plan.currency,
+        status: 'active',
+        source: 'admin_grant',
+        grantedByAdminId: req.adminId,
+        grantReason: reason,
+        activeFrom: now,
+        activeUntil: new Date(now.getTime() + addMs),
+      });
+    }
+
+    await writeAudit(req, {
+      action: 'subscription.grant',
+      target: { model: 'User', id },
+      payload: {
+        plan: plan.id,
+        durationDays,
+        extended,
+        activeUntil: sub.activeUntil,
+        subscriptionId: String(sub._id),
+        reason,
+      },
+    });
+
+    return res.status(200).json({
+      message: extended ? 'premium extended' : 'premium granted',
+      data: {
+        userId: id,
+        subscriptionId: String(sub._id),
+        plan: sub.plan,
+        status: sub.status,
+        activeUntil: sub.activeUntil,
+        extended,
+        source: sub.source,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ message: 'internal_error', details: err?.message });
+  }
+};
+
+/* -------------------------------------------------------------------------- */
 /* LISTINGS (admin views)                                                     */
 /* -------------------------------------------------------------------------- */
 
@@ -533,7 +725,9 @@ const approveListing = async (req, res) => {
     if (!isOid(id)) return res.status(400).json({ message: 'invalid id' });
     const listing = await Listing.findByIdAndUpdate(
       id,
-      { $set: { status: 'approved', approvedAt: new Date(), approvedByAdminId: req.adminId }, $unset: { rejectionReason: '' } },
+      // Approving publishes the listing: set it 'active' so it is live and
+      // searchable by default (approval metadata is still recorded).
+      { $set: { status: 'active', approvedAt: new Date(), approvedByAdminId: req.adminId }, $unset: { rejectionReason: '' } },
       { new: true },
     );
     if (!listing) return res.status(404).json({ message: 'listing not found' });
@@ -938,6 +1132,7 @@ export {
   // users
   getAllUsers, getUserById, updateUser, suspendUser, activateUser, deleteUser,
   upgradeToHost, downgradeFromHost, getUserBookings, createHost, updateHost,
+  grantPremium, getUserSubscription,
   // listings
   listListings, getListingAdmin, approveListing, rejectListing, pauseListing, activateListing,
   // bookings

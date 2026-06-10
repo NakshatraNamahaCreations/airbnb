@@ -29,6 +29,47 @@ const getMe = asynchandler(async(req, res) => {
 });
 
 
+/**
+ * POST /users/me/become-host
+ * Self-serve host upgrade. Gated on KYC: the user must have completed BOTH
+ * Aadhaar and face verification. Idempotent — calling again when already a host
+ * just returns the current user. Returns the full user (same shape as getMe) so
+ * the client can refresh its cached roles immediately.
+ */
+const becomeHost = asynchandler(async(req, res) => {
+  const { userId } = req;
+
+  const user = await User.findById(userId).lean();
+  if (!user) {
+    throw new NotFoundError('user doesnt exist');
+  }
+
+  // Already a host — no-op, return current state.
+  if (user.roles?.includes('host')) {
+    return res.status(200).json({ data: user });
+  }
+
+  // KYC gate: both Aadhaar and face must be verified.
+  if (user.aadhaar !== true || user.face !== true) {
+    return res.status(403).json({
+      code: 'kyc_required',
+      message: 'Complete Aadhaar and face verification before becoming a host.',
+    });
+  }
+
+  const updated = await User.findByIdAndUpdate(
+    userId,
+    { $addToSet: { roles: 'host' } },
+    { new: true, lean: true },
+  );
+
+  return res.status(200).json({
+    message: 'You are now a host',
+    data: updated,
+  });
+});
+
+
 
 
 const normalizeData = (data = {}) => {
@@ -331,4 +372,4 @@ const updateUser = asynchandler(async(req, res) => {
   return res.json({ ok: true, user: { id: String(user._id), ...user } });
 });
 
-export { getMe, updateMe, myWishlist, updateUser };
+export { getMe, updateMe, myWishlist, updateUser, becomeHost };

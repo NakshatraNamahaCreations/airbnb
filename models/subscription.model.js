@@ -11,10 +11,17 @@ const subscriptionSchema = new mongoose.Schema({
   amountPaise: { type: Number, required: true, min: 0 },
   currency:    { type: String, default: 'INR' },
 
-  // razorpay
+  // origin of the subscription
+  source: { type: String, enum: ['razorpay', 'admin_grant'], default: 'razorpay', index: true },
+
+  // razorpay (only set when source === 'razorpay')
   razorpayOrderId:   { type: String, index: true },
   razorpayPaymentId: { type: String, sparse: true, unique: true }, // idempotency
   razorpaySignature: { type: String },
+
+  // admin-grant metadata (only set when source === 'admin_grant')
+  grantedByAdminId: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
+  grantReason:      { type: String },
 
   // entitlement
   activeFrom:  { type: Date },

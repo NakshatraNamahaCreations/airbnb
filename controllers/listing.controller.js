@@ -98,6 +98,169 @@ const getMyListings = asyncHandler(async(req, res) => {
 
 });
 
+/**
+ * POST /listings/me  (authenticate + authorizeRoles('host'))
+ * Self-serve listing creation by a host. The listing is owned by the caller and
+ * always starts in `pending_review` — admins approve before it goes live.
+ */
+const createMyListing = asyncHandler(async(req, res) => {
+  const { userId } = req;
+  const {
+    title,
+    description,
+    imageUrls = [],
+    address,
+    city,
+    state,
+    pincode,
+    pricePerNight,
+    currency = 'INR',
+    bedrooms,
+    maxGuests,
+    maxInfants = 0,
+    maxPets = 0,
+    amenities = [],
+    location = {},
+    houseRules = [],
+    safetyAndProperty = [],
+    cancellationPolicy = 'moderate',
+  } = req.body;
+
+  // Basic required-field validation (Mongoose enums enforce state/amenities).
+  if (!title || !address || !city || !state || !pincode) {
+    return res.status(422).json({ message: 'title, address, city, state and pincode are required' });
+  }
+  if (pricePerNight === undefined || Number(pricePerNight) < 0) {
+    return res.status(422).json({ message: 'pricePerNight must be 0 or more' });
+  }
+  if (!bedrooms || Number(bedrooms) < 1) {
+    return res.status(422).json({ message: 'bedrooms must be at least 1' });
+  }
+  if (!maxGuests || Number(maxGuests) < 1) {
+    return res.status(422).json({ message: 'maxGuests must be at least 1' });
+  }
+  const coords = location?.coordinates;
+  if (!Array.isArray(coords) || coords.length !== 2) {
+    return res.status(422).json({ message: 'location.coordinates [lng, lat] is required' });
+  }
+
+  const newListing = new Listing({
+    hostId: userId,
+    title,
+    description,
+    imageUrls,
+    address,
+    city,
+    state,
+    pincode,
+    pricePerNight,
+    currency,
+    bedrooms,
+    maxGuests,
+    maxInfants,
+    maxPets,
+    amenities,
+    location: { type: 'Point', coordinates: coords },
+    houseRules,
+    safetyAndProperty,
+    cancellationPolicy,
+    // Hosts cannot self-publish; admin moderation is required.
+    status: 'pending_review',
+  });
+
+  await newListing.save();
+
+  res.status(201).json({ message: 'Listing submitted for review', listing: newListing });
+});
+
+// Fields a host may edit on their own listing (status is intentionally excluded —
+// hosts cannot self-publish; an edit re-enters the review queue below).
+const HOST_EDITABLE_FIELDS = [
+  'title',
+  'description',
+  'imageUrls',
+  'address',
+  'city',
+  'state',
+  'pincode',
+  'amenities',
+  'location',
+  'pricePerNight',
+  'currency',
+  'bedrooms',
+  'maxGuests',
+  'maxInfants',
+  'maxPets',
+  'houseRules',
+  'safetyAndProperty',
+  'cancellationPolicy',
+];
+
+/**
+ * PATCH /listings/me/:id  (authenticate + authorizeRoles('host'))
+ * Update one of the caller's own listings. Editing a live/approved listing sends
+ * it back to `pending_review`.
+ */
+const updateMyListing = asyncHandler(async(req, res) => {
+  const { userId } = req;
+  const { id } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    throw new NotFoundError('Invalid ID');
+  }
+
+  const listing = await Listing.findById(id).select('hostId status').lean();
+  if (!listing) {
+    return res.status(404).json({ message: 'Listing not found' });
+  }
+  if (String(listing.hostId) !== String(userId)) {
+    return res.status(403).json({ code: 'forbidden', message: 'You do not own this listing' });
+  }
+
+  const updateData = {};
+  for (const key of HOST_EDITABLE_FIELDS) {
+    if (req.body[key] !== undefined) updateData[key] = req.body[key];
+  }
+
+  // A material edit to an already-live listing requires re-moderation.
+  if (['active', 'approved'].includes(listing.status)) {
+    updateData.status = 'pending_review';
+  }
+
+  const updated = await Listing.findByIdAndUpdate(
+    id,
+    { $set: updateData },
+    { new: true, runValidators: true },
+  );
+
+  res.status(200).json({ message: 'Listing updated', data: updated });
+});
+
+/**
+ * DELETE /listings/me/:id  (authenticate + authorizeRoles('host'))
+ * Delete one of the caller's own listings.
+ */
+const deleteMyListing = asyncHandler(async(req, res) => {
+  const { userId } = req;
+  const { id } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    throw new NotFoundError('Invalid ID');
+  }
+
+  const listing = await Listing.findById(id).select('hostId').lean();
+  if (!listing) {
+    return res.status(404).json({ message: 'Listing not found' });
+  }
+  if (String(listing.hostId) !== String(userId)) {
+    return res.status(403).json({ code: 'forbidden', message: 'You do not own this listing' });
+  }
+
+  await Listing.findByIdAndDelete(id);
+
+  res.status(200).json({ message: 'Listing deleted' });
+});
+
 const getAllListings = asyncHandler(async(req, res) => {
   const { page, limit, skip, sort, q } = parsePagination(req.query);
   const filter = {};
@@ -525,4 +688,4 @@ const deleteListing = asyncHandler(async(req, res) => {
   });
 });
 
-export { registerListing, getMyListings, getAllListings, getListing, recentlyViewed, getNearbyListings, updateListing, deleteListing, searchListings };
+export { registerListing, getMyListings, createMyListing, updateMyListing, deleteMyListing, getAllListings, getListing, recentlyViewed, getNearbyListings, updateListing, deleteListing, searchListings };

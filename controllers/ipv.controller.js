@@ -60,6 +60,28 @@ const stripDataUriPrefix = (val) => {
   }
 };
 
+/**
+ * Decide whether a face capture counts as verified, from Meon's export envelope
+ * `{ code, status, success, msg, data: { image, faces_matched?, face_match_percentage? } }`.
+ *
+ * A true biometric match always passes. When no Aadhaar reference photo is
+ * available, Meon does a capture-only (no `faces_matched`); we accept a
+ * successful capture (export success + an image) as verified.
+ */
+const resolveFaceVerification = (exportEnvelope) => {
+  const envelope = exportEnvelope || {};
+  const result = envelope.data || {};
+  const matched = result.faces_matched === true;
+  const exportSucceeded =
+    envelope.success === true || /success/i.test(String(envelope.status || ""));
+  const hasImage = !!result.image;
+  return {
+    verified: matched || (exportSucceeded && hasImage),
+    faceUrl: result.image || "",
+    matchPercent: Number(result.face_match_percentage || 0),
+  };
+};
+
 export const initiateKycForFaceToken = async (req, res) => {
   try {
     const clientId = process.env.MEON_IPV_CLIENT_ID;
@@ -126,14 +148,20 @@ export const initiateKycForFaceToken = async (req, res) => {
 
     const redirectUrl1 = `${process.env.MEON_FACE_REDIRECT_URL}?userId=${userId}`;
 
+    // Only ask Meon to match when we actually have an Aadhaar reference photo.
+    // Otherwise do a capture-only (a match against an empty image silently
+    // returns no result and leaves the user un-verified).
+    const hasReference =
+      typeof imageToSend === "string" && imageToSend.trim().length > 20;
+
     const payload = {
       check_location: false,
       capture_video: false,
-      match_face: true,
+      match_face: hasReference,
       read_script: false,
       text_script: false,
       video_time: false,
-      image_to_be_match: imageToSend,
+      ...(hasReference ? { image_to_be_match: imageToSend } : {}),
       redirect_url: redirectUrl1,
     };
 
@@ -251,16 +279,15 @@ export const webhookapi = async (req, res) => {
       timeout: 60000,
     });
 
-    const result = exportRes?.data?.data || {};
-
-    // 3) update user
+    // 3) update user — a real match passes; otherwise a successful capture does.
+    const { verified, faceUrl, matchPercent } = resolveFaceVerification(exportRes?.data);
     const updatedUser = await User.findByIdAndUpdate(
       userId,
       {
         $set: {
-          face: !!result.faces_matched,
-          faceUrl: result.image || "",
-          faceMatchPercent: Number(result.face_match_percentage || 0),
+          face: verified,
+          faceUrl,
+          faceMatchPercent: matchPercent,
         },
       },
       { new: true, runValidators: true }
@@ -331,10 +358,11 @@ export const exportCapturedData = async (req, res) => {
       },
       timeout: 60000,
     });
-    const result = exportRes.data?.data;
-    user.face = result.faces_matched || false;
-    user.faceUrl = result.image || ""; // store captured image
-    user.faceMatchPercent = result.face_match_percentage || 0;
+    // A real match passes; otherwise a successful capture does.
+    const { verified, faceUrl, matchPercent } = resolveFaceVerification(exportRes.data);
+    user.face = verified;
+    user.faceUrl = faceUrl; // store captured image
+    user.faceMatchPercent = matchPercent;
 
     await user.save();
 

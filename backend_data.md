@@ -219,6 +219,93 @@ Same normalisation/validation rules as `POST /admin/hosts`. `phone` and `email` 
 **Auth:** super_admin/admin. Removes `host` from `roles`. **Body:** —
 **Response 200:** `{ "message": "host role removed", "data": <user> }`. Audit: `user.downgrade_from_host`.
 
+### 4.10 GET `/admin/users/:id/subscription`
+**Auth:** admin (any role, including `support` — read-only).
+Returns the current subscription state for any user, plus admin-grant metadata when present.
+
+**Response 200 (active sub):**
+```json
+{
+  "data": {
+    "user": { "_id": "...", "name": "...", "email": "...", "phone": "..." },
+    "subscription": {
+      "_id": "...",
+      "status": "active",
+      "plan": "premium_monthly",
+      "activeUntil": "2026-07-05T10:00:00.000Z",
+      "activeFrom":  "2026-06-05T10:00:00.000Z",
+      "source": "admin_grant",
+      "grantedByAdmin": { "_id": "...", "email": "vivek@stayfinder.com", "name": "Vivek", "role": "admin" },
+      "grantReason": "Onboarding promo",
+      "lastPaymentAt": null,
+      "amountPaise": 0,
+      "currency": "INR"
+    }
+  }
+}
+```
+
+**Response 200 (expired or none):**
+```json
+{
+  "data": {
+    "user": { "_id": "...", "name": "...", "email": "...", "phone": "..." },
+    "subscription": { "status": "expired", "plan": "premium_monthly", "activeUntil": "2026-05-01T10:00:00.000Z", "source": "razorpay", ... }
+  }
+}
+```
+
+```json
+{
+  "data": {
+    "user": { ... },
+    "subscription": { "status": "none", "plan": null, "activeUntil": null }
+  }
+}
+```
+
+`source` is `'razorpay'` for paid subscriptions and `'admin_grant'` for ones created via §4.10a. `grantedByAdmin` / `grantReason` are non-null only on admin-granted subs (or extensions thereof).
+
+**Errors:** `400` invalid id, `404` user not found.
+
+### 4.10a POST `/admin/users/:id/grant-premium`
+**Auth:** super_admin/admin. Grants (or **extends** if already active) a premium subscription without going through Razorpay. Useful for comp / support / influencer / promo.
+
+**Body (all optional):**
+```json
+{
+  "plan": "premium_monthly",
+  "durationDays": 30,
+  "reason": "VIP launch comp"
+}
+```
+- `plan` — defaults to `premium_monthly` (the only plan today). Returns `422` for unknown plans.
+- `durationDays` — defaults to the plan's standard length (30 for `premium_monthly`). Clamped to `[1, 3650]`.
+- `reason` — free-text, stored on the subscription row and the audit log payload.
+
+**Behavior:**
+- If the user has an active subscription, this **extends** `activeUntil` by `durationDays` from its current end date. The audit log records `extended: true`.
+- If the user has no active subscription, this creates a new `Subscription` row with `status: 'active'`, `source: 'admin_grant'`, `amountPaise: 0`, `grantedByAdminId` set, and `activeUntil = now + durationDays`.
+
+**Response 200:**
+```json
+{
+  "message": "premium granted",          // or "premium extended"
+  "data": {
+    "userId": "...",
+    "subscriptionId": "...",
+    "plan": "premium_monthly",
+    "status": "active",
+    "activeUntil": "2026-07-05T10:00:00.000Z",
+    "extended": false,
+    "source": "admin_grant"
+  }
+}
+```
+
+**Errors:** `400` invalid id / user is deleted, `404` user not found, `422` unknown plan / bad `durationDays`.
+**Audit action:** `subscription.grant`. Payload includes plan, durationDays, extended flag, resulting activeUntil, subscriptionId, reason.
+
 ### 4.11 GET `/admin/users/:id/bookings`
 **Auth:** admin.
 **Query:** `?page&limit&sort&status=`
@@ -556,6 +643,7 @@ Audit entries are written automatically by every mutating admin endpoint via [ut
 | `user.update` / `user.suspend` / `user.activate` / `user.delete` | `/admin/users/:id*` |
 | `user.upgrade_to_host` / `user.downgrade_from_host` | `/admin/users/:id/(up|down)grade-*` |
 | `host.create` / `host.update` | `/admin/hosts*` |
+| `subscription.grant` | `/admin/users/:id/grant-premium` |
 | `listing.approve` / `listing.reject` / `listing.pause` / `listing.activate` | `/admin/listings/:id/*` |
 | `booking.cancel` | `/admin/bookings/:id/cancel` |
 | `payment.refund` | `/admin/payments/:id/refund` |
@@ -581,6 +669,8 @@ Audit entries are written automatically by every mutating admin endpoint via [ut
 | `/admin/users/:id/activate` | POST | super_admin/admin |
 | `/admin/users/:id/upgrade-to-host` | POST | super_admin/admin |
 | `/admin/users/:id/downgrade-from-host` | POST | super_admin/admin |
+| `/admin/users/:id/grant-premium` | POST | super_admin/admin |
+| `/admin/users/:id/subscription` | GET | admin |
 | `/admin/users/:id/bookings` | GET | admin |
 | `/admin/hosts` | POST | super_admin/admin |
 | `/admin/hosts/:id` | PATCH | super_admin/admin |

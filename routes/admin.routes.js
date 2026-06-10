@@ -5,6 +5,7 @@ import {
   listAdmins, createAdmin, updateAdmin, deleteAdmin,
   getAllUsers, getUserById, updateUser, suspendUser, activateUser, deleteUser,
   upgradeToHost, downgradeFromHost, getUserBookings, createHost, updateHost,
+  grantPremium, getUserSubscription,
   listListings, getListingAdmin, approveListing, rejectListing, pauseListing, activateListing,
   listBookings, getBookingAdmin, cancelBookingByAdmin,
   listPayments, getPaymentAdmin, refundPayment,
@@ -47,6 +48,8 @@ router.post('/users/:id/activate', authorizeAdminRoles('super_admin', 'admin'), 
 router.delete('/users/:id', authorizeAdminRoles('super_admin', 'admin'), deleteUser);
 router.post('/users/:id/upgrade-to-host', authorizeAdminRoles('super_admin', 'admin'), upgradeToHost);
 router.post('/users/:id/downgrade-from-host', authorizeAdminRoles('super_admin', 'admin'), downgradeFromHost);
+router.post('/users/:id/grant-premium', authorizeAdminRoles('super_admin', 'admin'), grantPremium);
+router.get('/users/:id/subscription', getUserSubscription);
 router.get('/users/:id/bookings', getUserBookings);
 
 /* listings */
