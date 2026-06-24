@@ -410,7 +410,10 @@ console.log("userId",userId)
     throw new NotFoundError('Invalid ID');
   }
 
-  const listing = await Listing.findById(id).lean();
+  // Populate the host so the app can show the real host name/contact.
+  const listing = await Listing.findById(id)
+    .populate('hostId', 'name email phone')
+    .lean();
 
   if (!listing) {
     throw new NotFoundError('listing doesnt exist');
